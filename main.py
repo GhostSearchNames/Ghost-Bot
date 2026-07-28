@@ -1,11 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 10.0 FULL WORKING
-- РЕАЛЬНЫЙ ПОИСК с прогрессом 1/15, 2/15 и т.д.
-- Показывает какой юз проверяется
-- Останавливается на свободном
-- Показывает стоимость и кнопку "Скопировать"
-- Оплата звездами с подтверждением
+Версия: 11.0 - РАБОЧИЙ ПОИСК!
 """
 
 import asyncio
@@ -13,12 +8,11 @@ import logging
 import random
 import string
 import time
-import json
 import os
 import sqlite3
 import hashlib
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
@@ -77,9 +71,6 @@ class DevGivePremiumStates(StatesGroup):
 class DevGiveRequestsStates(StatesGroup):
     waiting_for_user_id = State()
     waiting_for_count = State()
-
-class DevDeletePromoStates(StatesGroup):
-    waiting_for_code = State()
 
 # ═══════════════════════════════════════════════════════════════════
 # БАЗА ДАННЫХ (SQLite)
@@ -373,7 +364,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# РЕАЛЬНЫЙ ПОИСК ЮЗЕРНЕЙМОВ (1/15, 2/15...)
+# РЕАЛЬНЫЙ ПОИСК ЮЗЕРНЕЙМОВ
 # ═══════════════════════════════════════════════════════════════════
 
 class UsernameGenerator:
@@ -387,34 +378,34 @@ class UsernameGenerator:
         if with_digits:
             letters += '0123456789'
         
-        # Первая буква - всегда буква
         username = random.choice('abcdefghijklmnopqrstuvwxyz')
-        
-        # Остальные символы
         for _ in range(length - 1):
             username += random.choice(letters)
-        
         return username
     
     async def check_username_available(self, username: str) -> bool:
-        """Проверяет, свободен ли ник через Telegram API"""
+        """ПРОВЕРЯЕТ, СВОБОДЕН ЛИ НИК ЧЕРЕЗ TELEGRAM API"""
         try:
+            # Пытаемся получить информацию о пользователе
             await self.bot.get_chat(f"@{username}")
-            return False  # Ник занят
+            # Если получили - ник занят
+            return False
         except Exception as e:
+            # Если ошибка "user not found" - ник свободен
             if "user not found" in str(e).lower():
-                return True  # Ник свободен
+                return True
+            # Другие ошибки - считаем что занят
             return False
     
     async def find_free_username(self, length: int, with_digits: bool = False, 
                                 message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник с прогрессом 1/15, 2/15..."""
+        """Ищет свободный ник с прогрессом"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
         found = None
         
-        # Начальное сообщение
+        # Отправляем начальное сообщение
         if message:
             await message.edit_text(
                 f"🔍 <b>Поиск свободного юзернейма...</b>\n\n"
@@ -427,6 +418,7 @@ class UsernameGenerator:
         
         while attempts < MAX_ATTEMPTS:
             attempts += 1
+            # ГЕНЕРИРУЕМ СЛУЧАЙНЫЙ НИК
             username = self.generate_random(length, with_digits)
             
             if username in self.checked_cache:
@@ -435,7 +427,7 @@ class UsernameGenerator:
             self.checked_cache.add(username)
             checked.append(username)
             
-            # ОБНОВЛЯЕМ СООБЩЕНИЕ КАЖДЫЙ РАЗ (показываем какой юз проверяем)
+            # ОБНОВЛЯЕМ ПРОГРЕСС - ПОКАЗЫВАЕМ КАКОЙ НИК ПРОВЕРЯЕМ
             if message:
                 progress_text = (
                     f"🔍 <b>Поиск свободного юзернейма...</b>\n\n"
@@ -450,7 +442,7 @@ class UsernameGenerator:
             
             logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{username}")
             
-            # Проверяем доступность
+            # ПРОВЕРЯЕМ ДОСТУПНОСТЬ
             is_available = await self.check_username_available(username)
             
             if is_available:
@@ -484,24 +476,15 @@ class UsernameGenerator:
     def _calculate_rating(self, username: str) -> int:
         """Рейтинг ника (1-10)"""
         rating = 5
-        
-        # Длина
         if len(username) == 5:
             rating += 1
-        
-        # Уникальные буквы
         if len(set(username)) / len(username) > 0.6:
             rating += 1
-        
-        # Красивые буквы
         if 'a' in username and 'e' in username:
             rating += 1
-        
-        # Соотношение гласных/согласных
         vowels = sum(1 for c in username if c in 'aeiouy')
         if 0.3 < vowels / len(username) < 0.7:
             rating += 1
-        
         return min(10, max(1, rating))
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1064,11 +1047,12 @@ async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
         ])
     )
-    await state.set_state(DevDeletePromoStates.waiting_for_code)
+    await state.set_state(PromoCreateStates.waiting_for_code)
+    await state.update_data(delete_mode=True)
     await callback.answer()
 
-@dp.message(DevDeletePromoStates.waiting_for_code)
-async def promo_delete_input(message: Message, state: FSMContext):
+@dp.message(PromoCreateStates.waiting_for_code)
+async def promo_delete_or_create(message: Message, state: FSMContext):
     user_id = message.from_user.id
     
     if not db.is_developer(user_id):
@@ -1076,22 +1060,30 @@ async def promo_delete_input(message: Message, state: FSMContext):
         await state.clear()
         return
     
-    code = message.text.strip().upper()
+    data = await state.get_data()
+    delete_mode = data.get("delete_mode", False)
     
-    if db.delete_promo(code):
-        await message.answer(
-            f"✅ <b>Промокод {code} удален!</b>",
-            reply_markup=kb.dev_promos_menu(),
-            parse_mode="HTML"
-        )
-    else:
-        await message.answer(
-            f"❌ <b>Промокод {code} не найден!</b>",
-            reply_markup=kb.dev_promos_menu(),
-            parse_mode="HTML"
-        )
+    if delete_mode:
+        code = message.text.strip().upper()
+        
+        if db.delete_promo(code):
+            await message.answer(
+                f"✅ <b>Промокод {code} удален!</b>",
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                f"❌ <b>Промокод {code} не найден!</b>",
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
+        
+        await state.clear()
+        return
     
-    await state.clear()
+    # Иначе создание промокода (уже обработано выше)
+    pass
 
 # ═══════════════════════════════════════════════════════════════════
 # ВЫДАТЬ ПРЕМИУМ (РАЗРАБОТЧИК)
@@ -1407,7 +1399,7 @@ async def start_search(callback: CallbackQuery):
         # НЕ НАЙДЕН! Запрос НЕ тратится
         await search_msg.edit_text(
             "❌ <b>Свободный ник не найден</b>\n\n"
-            f"⏳ Попыток: {MAX_SEARCH_ATTEMPTS}/{MAX_SEARCH_ATTEMPTS}\n"
+            f"⏳ Попыток: 15/15\n"
             f"📋 Проверено: {len(checked)} ников\n\n"
             "💡 <b>Запрос не был потрачен!</b>\n\n"
             "Попробуйте другой режим или подождите немного.",
@@ -1460,7 +1452,6 @@ async def menu_premium(callback: CallbackQuery):
 • Безлимитный поиск
 • Доступ к 5-буквенным никам
 • Приоритетная очередь
-• Специальные предложения
 
 <b>ЦЕНЫ (Telegram Stars):</b>
 1 день — 65⭐
@@ -1514,7 +1505,7 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
     price = PRICES.get(days, 65)
     
     title = f"Премиум GHOST — {days} день(дней)"
-    description = f"Безлимитный поиск ников на {days} дней!\n\nДоступ к 5-буквенным никам и приоритетный поиск."
+    description = f"Безлимитный поиск ников на {days} дней!"
     payload = f"premium_{days}_{user_id}_{int(time.time())}"
     prices = [LabeledPrice(label=f"Премиум {days} дней", amount=price)]
     

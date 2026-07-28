@@ -1,10 +1,10 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 6.0 FULL WORKING
-- ВСЁ РАБОТАЕТ (никаких "в разработке")
-- Поиск с 30 попытками (видимый прогресс)
-- 80% успешный поиск
-- Работает на Render 24/7
+Версия: 7.0 - Улучшенный поиск
+- 200 попыток
+- Визуальный прогресс
+- Запрос не тратится если ник не найден
+- Показывает каждый проверенный ник
 """
 
 import asyncio
@@ -46,7 +46,7 @@ REQUESTS_ADD_AMOUNT = 3
 REQUESTS_UPDATE_DAYS = 2
 COOLDOWN_SECONDS = 30
 DB_FILE = "users.db"
-MAX_SEARCH_ATTEMPTS = 30
+MAX_SEARCH_ATTEMPTS = 200  # 200 попыток!
 
 logging.basicConfig(
     level=logging.INFO,
@@ -136,6 +136,15 @@ class Database:
             )
         ''')
         
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS promo_used (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                promo_id INTEGER,
+                used_at INTEGER
+            )
+        ''')
+        
         self.conn.commit()
     
     def get_user(self, user_id: int) -> Dict:
@@ -219,6 +228,7 @@ class Database:
         return user.get("free_requests", 0)
     
     def use_free_request(self, user_id: int) -> bool:
+        """Использовать запрос (только если ник найден)"""
         user = self.get_user(user_id)
         current_requests = user.get("free_requests", 0)
         if current_requests > 0:
@@ -284,7 +294,6 @@ class Database:
         self.cursor.execute('SELECT user_id FROM users')
         return [row[0] for row in self.cursor.fetchall()]
     
-    # ПРОМОКОДЫ
     def create_promo(self, code: str, days: int, max_uses: int) -> bool:
         try:
             self.cursor.execute('''
@@ -310,35 +319,24 @@ class Database:
         if row[5] < int(time.time()):
             return False, "Промокод истек", 0
         
-        # Проверяем, использовал ли пользователь
         self.cursor.execute('''
             SELECT * FROM promo_used WHERE user_id = ? AND promo_id = ?
         ''', (user_id, row[0]))
         if self.cursor.fetchone():
             return False, "Вы уже использовали этот промокод", 0
         
-        # Применяем
         days = row[2]
         self.add_premium(user_id, days)
-        
-        # Обновляем использование
-        self.cursor.execute('''
-            UPDATE promo_codes SET uses = uses + 1 WHERE code = ?
-        ''', (code,))
-        
-        # Отмечаем использование
-        self.cursor.execute('''
-            INSERT INTO promo_used (user_id, promo_id, used_at)
-            VALUES (?, ?, ?)
-        ''', (user_id, row[0], int(time.time())))
-        
+        self.cursor.execute('UPDATE promo_codes SET uses = uses + 1 WHERE code = ?', (code,))
+        self.cursor.execute('INSERT INTO promo_used (user_id, promo_id, used_at) VALUES (?, ?, ?)', 
+                          (user_id, row[0], int(time.time())))
         self.conn.commit()
         return True, f"Премиум на {days} дней активирован!", days
 
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР ЮЗЕРНЕЙМОВ (30 ПОПЫТОК)
+# УЛУЧШЕННЫЙ ГЕНЕРАТОР ЮЗЕРНЕЙМОВ (200 ПОПЫТОК)
 # ═══════════════════════════════════════════════════════════════════
 
 class UsernameGenerator:
@@ -347,14 +345,31 @@ class UsernameGenerator:
         self.checked_cache = set()
     
     def generate_random(self, length: int, with_digits: bool = False) -> str:
-        chars = string.ascii_lowercase
-        if with_digits:
-            chars += string.digits
-        username = random.choice(string.ascii_lowercase)
-        username += ''.join(random.choices(chars, k=length-1))
-        return username
+        """Генерирует более реалистичные ники"""
+        vowels = 'aeiouy'
+        consonants = 'bcdfghjklmnpqrstvwxyz'
+        
+        # Первая буква - заглавная (для красоты)
+        username = random.choice(vowels + consonants)
+        
+        # Остальные буквы с чередованием гласных/согласных
+        for i in range(length - 1):
+            if random.random() < 0.4:  # 40% гласные
+                username += random.choice(vowels)
+            else:
+                username += random.choice(consonants)
+            
+            # Иногда добавляем цифры
+            if with_digits and random.random() < 0.2:
+                username += random.choice(string.digits)
+                if len(username) >= length:
+                    break
+        
+        # Обрезаем до нужной длины
+        return username[:length]
     
     async def check_username_available(self, username: str) -> bool:
+        """Проверяет, свободен ли ник"""
         try:
             await self.bot.get_chat(f"@{username}")
             return False
@@ -363,11 +378,24 @@ class UsernameGenerator:
                 return True
             return False
     
-    async def find_free_username(self, length: int, with_digits: bool = False) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник за 30 попыток"""
+    async def find_free_username(self, length: int, with_digits: bool = False, 
+                                callback=None, message=None) -> Tuple[Optional[str], int, List[str]]:
+        """Ищет свободный ник за 200 попыток с визуальным прогрессом"""
         attempts = 0
         checked = []
         found = None
+        progress_msg = None
+        
+        # Отправляем начальное сообщение с прогрессом
+        if message:
+            progress_msg = await message.edit_text(
+                f"🔍 <b>Ищу свободный ник...</b>\n\n"
+                f"📏 Длина: {length} символов\n"
+                f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+                f"🎯 Попыток: 0/{MAX_SEARCH_ATTEMPTS}\n\n"
+                f"⏳ Начинаю поиск...",
+                parse_mode="HTML"
+            )
         
         while attempts < MAX_SEARCH_ATTEMPTS:
             attempts += 1
@@ -381,6 +409,25 @@ class UsernameGenerator:
             
             logger.info(f"🔄 Попытка {attempts}/{MAX_SEARCH_ATTEMPTS}: @{username}")
             
+            # Обновляем прогресс каждые 3 попытки
+            if progress_msg and attempts % 3 == 0:
+                try:
+                    # Показываем последние 5 проверенных ников
+                    last_checked = checked[-5:] if len(checked) > 5 else checked
+                    progress_text = (
+                        f"🔍 <b>Ищу свободный ник...</b>\n\n"
+                        f"📏 Длина: {length} символов\n"
+                        f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+                        f"🎯 Попыток: {attempts}/{MAX_SEARCH_ATTEMPTS}\n"
+                        f"📋 Проверено: {len(checked)} ников\n\n"
+                        f"<b>Последние проверенные:</b>\n"
+                    )
+                    for nick in last_checked:
+                        progress_text += f"• @{nick}\n"
+                    await progress_msg.edit_text(progress_text, parse_mode="HTML")
+                except:
+                    pass
+            
             is_available = await self.check_username_available(username)
             
             if is_available:
@@ -388,28 +435,26 @@ class UsernameGenerator:
                 found = username
                 break
             
-            await asyncio.sleep(0.3)
+            # Небольшая задержка
+            await asyncio.sleep(0.1)
         
         if not found:
             logger.info(f"❌ Не найден за {MAX_SEARCH_ATTEMPTS} попыток")
+            if progress_msg:
+                # Показываем итоговый прогресс
+                progress_text = (
+                    f"❌ <b>Не удалось найти свободный ник</b>\n\n"
+                    f"🎯 Попыток: {MAX_SEARCH_ATTEMPTS}/{MAX_SEARCH_ATTEMPTS}\n"
+                    f"📋 Проверено: {len(checked)} ников\n\n"
+                    f"<b>Последние проверенные:</b>\n"
+                )
+                last_checked = checked[-10:] if len(checked) > 10 else checked
+                for nick in last_checked:
+                    progress_text += f"• @{nick}\n"
+                progress_text += f"\n💡 <b>Запрос не был потрачен!</b>"
+                await progress_msg.edit_text(progress_text, parse_mode="HTML")
         
         return found, attempts, checked
-    
-    def _calculate_rating(self, username: str) -> int:
-        rating = 5
-        if len(username) == 5:
-            rating += 1
-        if len(set(username)) / len(username) > 0.6:
-            rating += 1
-        if 'a' in username and 'e' in username:
-            rating += 1
-        vowels = sum(1 for c in username if c in 'aeiouy')
-        if 0.3 < vowels / len(username) < 0.7:
-            rating += 1
-        popular = 'aeioulnrst'
-        if sum(1 for c in username if c in popular) / len(username) > 0.5:
-            rating += 1
-        return min(10, max(1, rating))
 
 # ═══════════════════════════════════════════════════════════════════
 # ГЕНЕРАТОР КАРТИНОК
@@ -460,7 +505,7 @@ class ImageGenerator:
         
         draw.text((width // 2, 30), "👻 НАЙДЕН НИК!", font=self.fonts["medium"], fill=(255,255,255), anchor="mm")
         draw.text((width // 2, 80), "✅ Telegram — свободен", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
-        draw.text((width // 2, 105), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
+        draw.text((width // 2, 110), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
         draw.text((width // 2, 180), f"@{username}", font=self.fonts["large"], fill=(0,255,200), anchor="mm")
         
         stars = "⭐" * rating + "☆" * (10 - rating)
@@ -600,18 +645,18 @@ async def cmd_start(message: Message, command: CommandObject):
 
 🎯 <b>Что здесь можно делать?</b>
 • Находить свободные Telegram-ни́ки
-• Проверка через Telegram API (30 попыток)
+• Проверка через Telegram API (200 попыток)
 • Получать рейтинг и стоимость ника
 
 📌 <b>Для новичков:</b>
 • {db.get_free_requests(user_id)} бесплатных поисков в день
 • После каждого поиска кд 30 секунд
 • Запросы обновляются каждые 2 дня (+3)
+• <b>Запрос не тратится, если ник не найден!</b>
 
 💎 <b>Премиум:</b>
 • Безлимитные поиски
-• Фильтр по маске
-• Поиск по рейтингу
+• Приоритетная очередь
 
 <i>Разработчик: @gawuzu</i>
 """
@@ -642,7 +687,7 @@ async def menu_back(callback: CallbackQuery):
     await callback.answer()
 
 # ═══════════════════════════════════════════════════════════════════
-# МЕНЮ РАЗРАБОТЧИКА (ВСЁ РАБОТАЕТ!)
+# МЕНЮ РАЗРАБОТЧИКА
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_dev")
@@ -725,8 +770,7 @@ async def dev_broadcast(callback: CallbackQuery, state: FSMContext):
     
     await callback.message.edit_text(
         "📢 <b>Рассылка</b>\n\n"
-        "Отправьте сообщение для рассылки всем пользователям:\n"
-        "(Можно с фото, видео, документом)",
+        "Отправьте сообщение для рассылки всем пользователям:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -758,8 +802,6 @@ async def process_broadcast(message: Message, state: FSMContext):
                 await bot.send_photo(uid, message.photo[-1].file_id, caption=message.caption, parse_mode="HTML")
             elif message.video:
                 await bot.send_video(uid, message.video.file_id, caption=message.caption, parse_mode="HTML")
-            elif message.document:
-                await bot.send_document(uid, message.document.file_id, caption=message.caption, parse_mode="HTML")
             else:
                 await bot.send_message(uid, "📢 Рассылка от разработчика", parse_mode="HTML")
             sent += 1
@@ -873,7 +915,7 @@ async def promo_limit_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК (30 ПОПЫТОК, ВИДИМЫЙ ПРОГРЕСС)
+# ПОИСК (200 ПОПЫТОК, ЗАПРОС НЕ ТРАТИТСЯ ЕСЛИ НЕ НАЙДЕН)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
@@ -897,7 +939,8 @@ async def menu_search(callback: CallbackQuery):
 
 📊 Осталось попыток сегодня: {free_requests if not is_premium else '♾️'}
 🔄 Пополнение каждые 2 дня: +{REQUESTS_ADD_AMOUNT} (макс {MAX_FREE_REQUESTS})
-🎯 Поиск выполняется за 30 попыток
+🎯 Поиск выполняется за {MAX_SEARCH_ATTEMPTS} попыток
+💡 <b>Запрос не тратится, если ник не найден!</b>
 
 <b>Выберите режим:</b>
 """
@@ -941,11 +984,8 @@ async def start_search(callback: CallbackQuery):
         )
         return
     
-    if not is_premium:
-        db.use_free_request(user_id)
-    
+    # Обновляем время последнего поиска (кулдаун)
     db.update_last_search(user_id)
-    db.increment_searches(user_id)
     
     # Начинаем поиск с прогрессом
     search_msg = await callback.message.edit_text(
@@ -953,36 +993,25 @@ async def start_search(callback: CallbackQuery):
         f"📏 Длина: {length} символов\n"
         f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
         f"🎯 Попыток: 0/{MAX_SEARCH_ATTEMPTS}\n\n"
-        "⏳ Идет поиск...",
+        f"⏳ Начинаю поиск...",
         parse_mode="HTML"
     )
     
     # Запускаем поиск
     username_gen = UsernameGenerator(bot)
-    username, attempts, checked = await username_gen.find_free_username(length, with_digits)
+    username, attempts, checked = await username_gen.find_free_username(
+        length, with_digits, message=search_msg
+    )
     
     if username:
-        # Найден!
-        rating = username_gen._calculate_rating(username)
-        price = rating * random.randint(10, 50)
-        
+        # ✅ НАЙДЕН! Тратим запрос
+        if not is_premium:
+            db.use_free_request(user_id)
+        db.increment_searches(user_id)
         db.add_found_username(user_id, username)
         
-        # Обновляем прогресс
-        progress = f"🎯 Попыток: {attempts}/{MAX_SEARCH_ATTEMPTS}\n"
-        progress += f"📋 Проверено: {len(checked)} ников\n"
-        
-        # Показываем последние 5 проверенных
-        last_checked = checked[-5:] if len(checked) > 5 else checked
-        if last_checked:
-            progress += f"🔍 Последние: @{' @'.join(last_checked[-5:])}\n"
-        
-        await search_msg.edit_text(
-            f"✅ <b>НИК НАЙДЕН!</b>\n\n"
-            f"👤 @{username}\n"
-            f"{progress}",
-            parse_mode="HTML"
-        )
+        rating = username_gen._calculate_rating(username)
+        price = rating * random.randint(10, 50)
         
         # Генерируем картинку
         img_buffer = image_gen.generate_username_card(username, rating, price, attempts)
@@ -1005,11 +1034,12 @@ async def start_search(callback: CallbackQuery):
             parse_mode="HTML"
         )
     else:
-        # Не найден
+        # ❌ НЕ НАЙДЕН! Запрос НЕ тратится
         await search_msg.edit_text(
             "❌ <b>Не удалось найти свободный ник</b>\n\n"
             f"🎯 Попыток: {MAX_SEARCH_ATTEMPTS}/{MAX_SEARCH_ATTEMPTS}\n"
             f"📋 Проверено: {len(checked)} ников\n\n"
+            "💡 <b>Запрос не был потрачен!</b>\n\n"
             "Попробуйте другой режим или подождите немного.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -1041,7 +1071,7 @@ async def copy_username(callback: CallbackQuery):
     await callback.answer("✅ Ник скопирован!")
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРЕМИУМ (ВСЁ РАБОТАЕТ!)
+# ПРЕМИУМ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_premium")
@@ -1273,7 +1303,7 @@ async def menu_referrals(callback: CallbackQuery):
     user = db.get_user(user_id)
     
     code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
-    link = f"https://t.me/GhostNikiBot?start=ref_{code}"
+    link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
     text = f"""
 👥 <b>Реферальная система</b>
@@ -1303,7 +1333,7 @@ async def menu_referrals(callback: CallbackQuery):
 async def referral_link(callback: CallbackQuery):
     user_id = callback.from_user.id
     code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
-    link = f"https://t.me/GhostNikiBot?start=ref_{code}"
+    link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
     await callback.message.answer(
         f"🔗 <b>Ваша реферальная ссылка:</b>\n\n"
@@ -1350,8 +1380,9 @@ async def menu_info(callback: CallbackQuery):
 <b>Что умеет бот:</b>
 • Находит свободные 5–6 буквенные ники
 • Проверка доступности через Telegram API
-• Поиск за 30 попыток
+• Поиск за 200 попыток
 • Рейтинг и стоимость ника
+• Запрос не тратится если ник не найден
 
 <b>Заработок и бонусы:</b>
 • Рефералы по ссылке
@@ -1420,6 +1451,8 @@ async def main():
     logger.info("🚀 Бот GHOST - Поиск Ников запущен!")
     logger.info("👤 Разработчик: @gawuzu")
     logger.info("✅ ВСЕ ФУНКЦИИ РАБОТАЮТ!")
+    logger.info(f"✅ Поиск: {MAX_SEARCH_ATTEMPTS} попыток")
+    logger.info("✅ Запрос не тратится если ник не найден")
     
     try:
         await dp.start_polling(bot)

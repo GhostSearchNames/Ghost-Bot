@@ -358,18 +358,15 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует случайный ник"""
         chars = string.ascii_lowercase
         if with_digits:
             chars += string.digits
-        
         nick = random.choice(string.ascii_lowercase)
         for _ in range(length - 1):
             nick += random.choice(chars)
         return nick
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ, СВОБОДЕН ЛИ НИК ЧЕРЕЗ TELEGRAM API"""
         try:
             await self.bot.get_chat(f"@{nick}")
             logger.info(f"❌ @{nick} - ЗАНЯТ")
@@ -383,8 +380,7 @@ class NickGenerator:
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник с прогрессом (10 попыток, задержка 2 сек)"""
-        MAX_ATTEMPTS = 10  # 10 попыток
+        MAX_ATTEMPTS = 10
         attempts = 0
         checked = []
         found = None
@@ -423,9 +419,9 @@ class NickGenerator:
             
             logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
             
-            # РЕАЛЬНАЯ ПРОВЕРКА
             is_available = await self.check_available(nick)
             
+            # СРАЗУ ВЫХОДИМ ПРИ НАХОЖДЕНИИ!
             if is_available:
                 found = nick
                 if message:
@@ -438,7 +434,6 @@ class NickGenerator:
                     )
                 break
             
-            # ЗАДЕРЖКА 2 СЕКУНДЫ (чтобы не банили)
             await asyncio.sleep(2)
         
         if not found and message:
@@ -453,7 +448,6 @@ class NickGenerator:
         return found, attempts, checked
     
     def calculate_rating(self, nick: str) -> int:
-        """Рейтинг ника (1-10)"""
         rating = 5
         if len(nick) == 5:
             rating += 1
@@ -467,7 +461,6 @@ class NickGenerator:
         if 0.2 < vowels / len(nick) < 0.8:
             rating += 1
         return min(10, max(1, round(rating)))
-
 # ═══════════════════════════════════════════════════════════════════
 # ГЕНЕРАТОР КАРТИНОК
 # ═══════════════════════════════════════════════════════════════════

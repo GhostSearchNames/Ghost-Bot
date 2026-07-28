@@ -1,12 +1,11 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 9.0 FULL WORKING
-- 15 попыток поиска с видимым прогрессом
-- 5 букв - только премиум
-- 6 букв - бесплатно
-- Панель разработчика
-- Промокоды
-- Покупка через Stars
+Версия: 10.0 FULL WORKING
+- РЕАЛЬНЫЙ ПОИСК с прогрессом 1/15, 2/15 и т.д.
+- Показывает какой юз проверяется
+- Останавливается на свободном
+- Показывает стоимость и кнопку "Скопировать"
+- Оплата звездами с подтверждением
 """
 
 import asyncio
@@ -48,7 +47,7 @@ REQUESTS_ADD_AMOUNT = 3
 REQUESTS_UPDATE_DAYS = 2
 COOLDOWN_SECONDS = 30
 DB_FILE = "users.db"
-MAX_SEARCH_ATTEMPTS = 15  # 15 попыток
+MAX_SEARCH_ATTEMPTS = 15
 
 logging.basicConfig(
     level=logging.INFO,
@@ -374,7 +373,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР ЮЗЕРНЕЙМОВ (15 ПОПЫТОК)
+# РЕАЛЬНЫЙ ПОИСК ЮЗЕРНЕЙМОВ (1/15, 2/15...)
 # ═══════════════════════════════════════════════════════════════════
 
 class UsernameGenerator:
@@ -384,52 +383,49 @@ class UsernameGenerator:
     
     def generate_random(self, length: int, with_digits: bool = False) -> str:
         """Генерирует случайный ник"""
-        vowels = 'aeiouy'
-        consonants = 'bcdfghjklmnpqrstvwxyz'
+        letters = 'abcdefghijklmnopqrstuvwxyz'
+        if with_digits:
+            letters += '0123456789'
         
-        username = random.choice(vowels + consonants)
+        # Первая буква - всегда буква
+        username = random.choice('abcdefghijklmnopqrstuvwxyz')
         
-        for i in range(length - 1):
-            if random.random() < 0.4:
-                username += random.choice(vowels)
-            else:
-                username += random.choice(consonants)
-            
-            if with_digits and random.random() < 0.2:
-                username += random.choice(string.digits)
-                if len(username) >= length:
-                    break
+        # Остальные символы
+        for _ in range(length - 1):
+            username += random.choice(letters)
         
-        return username[:length]
+        return username
     
     async def check_username_available(self, username: str) -> bool:
-        """Проверяет, свободен ли ник"""
+        """Проверяет, свободен ли ник через Telegram API"""
         try:
             await self.bot.get_chat(f"@{username}")
-            return False
+            return False  # Ник занят
         except Exception as e:
             if "user not found" in str(e).lower():
-                return True
+                return True  # Ник свободен
             return False
     
     async def find_free_username(self, length: int, with_digits: bool = False, 
                                 message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник за 15 попыток с видимым прогрессом"""
+        """Ищет свободный ник с прогрессом 1/15, 2/15..."""
+        MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
         found = None
         
+        # Начальное сообщение
         if message:
             await message.edit_text(
-                f"🔍 <b>Ищу свободный ник...</b>\n\n"
+                f"🔍 <b>Поиск свободного юзернейма...</b>\n\n"
                 f"📏 Длина: {length} символов\n"
                 f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-                f"🎯 Попыток: 0/15\n\n"
-                f"⏳ Начинаю поиск...",
+                f"⏳ 0/{MAX_ATTEMPTS}\n\n"
+                f"<i>Начинаю поиск...</i>",
                 parse_mode="HTML"
             )
         
-        while attempts < MAX_SEARCH_ATTEMPTS:
+        while attempts < MAX_ATTEMPTS:
             attempts += 1
             username = self.generate_random(length, with_digits)
             
@@ -439,22 +435,22 @@ class UsernameGenerator:
             self.checked_cache.add(username)
             checked.append(username)
             
-            logger.info(f"🔄 Попытка {attempts}/{MAX_SEARCH_ATTEMPTS}: @{username}")
-            
+            # ОБНОВЛЯЕМ СООБЩЕНИЕ КАЖДЫЙ РАЗ (показываем какой юз проверяем)
             if message:
                 progress_text = (
-                    f"🔍 <b>Ищу свободный ник...</b>\n\n"
+                    f"🔍 <b>Поиск свободного юзернейма...</b>\n\n"
                     f"📏 Длина: {length} символов\n"
                     f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-                    f"🎯 Попытка {attempts}/{MAX_SEARCH_ATTEMPTS}\n"
+                    f"⏳ <b>{attempts}/{MAX_ATTEMPTS}</b>\n\n"
+                    f"🔎 Проверяю: <code>@{username}</code>\n"
                     f"📋 Проверено: {len(checked)} ников\n\n"
-                    f"<b>Последние проверенные:</b>\n"
+                    f"<i>Ищу свободный ник...</i>"
                 )
-                last_checked = checked[-5:] if len(checked) > 5 else checked
-                for nick in last_checked:
-                    progress_text += f"• @{nick}\n"
                 await message.edit_text(progress_text, parse_mode="HTML")
             
+            logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{username}")
+            
+            # Проверяем доступность
             is_available = await self.check_username_available(username)
             
             if is_available:
@@ -463,45 +459,49 @@ class UsernameGenerator:
                 
                 if message:
                     await message.edit_text(
-                        f"✅ <b>НИК НАЙДЕН!</b>\n\n"
-                        f"👤 @{username}\n"
-                        f"🎯 Найден на попытке {attempts}/{MAX_SEARCH_ATTEMPTS}\n"
+                        f"🎉 <b>НАЙДЕН СВОБОДНЫЙ НИК!</b>\n\n"
+                        f"👤 <code>@{username}</code>\n"
+                        f"🎯 Найден на попытке {attempts}/{MAX_ATTEMPTS}\n"
                         f"📋 Проверено: {len(checked)} ников",
                         parse_mode="HTML"
                     )
                 break
             
-            await asyncio.sleep(0.5)
+            # Задержка между запросами (важно для API)
+            await asyncio.sleep(0.3)
         
         if not found and message:
-            progress_text = (
-                f"❌ <b>Не удалось найти свободный ник</b>\n\n"
-                f"🎯 Попыток: {MAX_SEARCH_ATTEMPTS}/{MAX_SEARCH_ATTEMPTS}\n"
+            await message.edit_text(
+                f"❌ <b>Свободный ник не найден</b>\n\n"
+                f"⏳ Попыток: {MAX_ATTEMPTS}/{MAX_ATTEMPTS}\n"
                 f"📋 Проверено: {len(checked)} ников\n\n"
-                f"<b>Последние проверенные:</b>\n"
+                f"💡 Запрос не потрачен! Попробуйте другой режим.",
+                parse_mode="HTML"
             )
-            last_checked = checked[-10:] if len(checked) > 10 else checked
-            for nick in last_checked:
-                progress_text += f"• @{nick}\n"
-            progress_text += f"\n💡 <b>Запрос не был потрачен!</b>"
-            await message.edit_text(progress_text, parse_mode="HTML")
         
         return found, attempts, checked
     
     def _calculate_rating(self, username: str) -> int:
+        """Рейтинг ника (1-10)"""
         rating = 5
+        
+        # Длина
         if len(username) == 5:
             rating += 1
+        
+        # Уникальные буквы
         if len(set(username)) / len(username) > 0.6:
             rating += 1
+        
+        # Красивые буквы
         if 'a' in username and 'e' in username:
             rating += 1
+        
+        # Соотношение гласных/согласных
         vowels = sum(1 for c in username if c in 'aeiouy')
         if 0.3 < vowels / len(username) < 0.7:
             rating += 1
-        popular = 'aeioulnrst'
-        if sum(1 for c in username if c in popular) / len(username) > 0.5:
-            rating += 1
+        
         return min(10, max(1, rating))
 
 # ═══════════════════════════════════════════════════════════════════
@@ -612,13 +612,10 @@ class Keyboards:
     
     @staticmethod
     def search_menu(is_premium: bool = False) -> InlineKeyboardMarkup:
-        buttons = []
-        
-        buttons.append([
-            InlineKeyboardButton(text="🔤 6 букв", callback_data="search_6_false"),
-            InlineKeyboardButton(text="🔢 6 букв + цифры", callback_data="search_6_true")
-        ])
-        
+        buttons = [
+            [InlineKeyboardButton(text="🔤 6 букв", callback_data="search_6_false"),
+             InlineKeyboardButton(text="🔢 6 букв + цифры", callback_data="search_6_true")]
+        ]
         if is_premium:
             buttons.append([
                 InlineKeyboardButton(text="⭐ 5 букв (PREMIUM)", callback_data="search_5_false"),
@@ -629,7 +626,6 @@ class Keyboards:
                 InlineKeyboardButton(text="🔒 5 букв (PREMIUM)", callback_data="noop"),
                 InlineKeyboardButton(text="🔒 5 букв + цифры (PREMIUM)", callback_data="noop")
             ])
-        
         buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="menu_back")])
         return InlineKeyboardMarkup(inline_keyboard=buttons)
     
@@ -1276,7 +1272,7 @@ async def dev_give_requests_count(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК
+# ПОИСК (С ПРОГРЕССОМ 1/15, 2/15...)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
@@ -1304,7 +1300,7 @@ async def menu_search(callback: CallbackQuery):
 
 📊 Осталось попыток сегодня: {free_requests if not is_premium else '♾️'}
 🔄 Пополнение каждые 2 дня: +{REQUESTS_ADD_AMOUNT} (макс {MAX_FREE_REQUESTS})
-🎯 Поиск выполняется за {MAX_SEARCH_ATTEMPTS} попыток
+🎯 Поиск выполняется за 15 попыток
 💡 <b>Запрос не тратится, если ник не найден!</b>
 
 <b>Выберите режим:</b>
@@ -1365,11 +1361,11 @@ async def start_search(callback: CallbackQuery):
     
     # Начинаем поиск
     search_msg = await callback.message.edit_text(
-        "🔍 <b>Ищу свободный ник...</b>\n\n"
+        "🔍 <b>Поиск свободного юзернейма...</b>\n\n"
         f"📏 Длина: {length} символов\n"
         f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-        f"🎯 Попыток: 0/{MAX_SEARCH_ATTEMPTS}\n\n"
-        f"⏳ Начинаю поиск...",
+        f"⏳ 0/15\n\n"
+        f"<i>Начинаю поиск...</i>",
         parse_mode="HTML"
     )
     
@@ -1410,8 +1406,8 @@ async def start_search(callback: CallbackQuery):
     else:
         # НЕ НАЙДЕН! Запрос НЕ тратится
         await search_msg.edit_text(
-            "❌ <b>Не удалось найти свободный ник</b>\n\n"
-            f"🎯 Попыток: {MAX_SEARCH_ATTEMPTS}/{MAX_SEARCH_ATTEMPTS}\n"
+            "❌ <b>Свободный ник не найден</b>\n\n"
+            f"⏳ Попыток: {MAX_SEARCH_ATTEMPTS}/{MAX_SEARCH_ATTEMPTS}\n"
             f"📋 Проверено: {len(checked)} ников\n\n"
             "💡 <b>Запрос не был потрачен!</b>\n\n"
             "Попробуйте другой режим или подождите немного.",
@@ -1449,7 +1445,7 @@ async def copy_username(callback: CallbackQuery):
     await callback.answer("✅ Ник скопирован!")
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРЕМИУМ
+# ПРЕМИУМ С ОПЛАТОЙ ЗВЁЗДАМИ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_premium")
@@ -1464,14 +1460,15 @@ async def menu_premium(callback: CallbackQuery):
 • Безлимитный поиск
 • Доступ к 5-буквенным никам
 • Приоритетная очередь
+• Специальные предложения
 
-<b>ЦЕНЫ:</b>
-1 дн — 65⭐
-3 дн — 150⭐
-10 дн — 400⭐
-30 дн — 800⭐
+<b>ЦЕНЫ (Telegram Stars):</b>
+1 день — 65⭐
+3 дня — 150⭐
+10 дней — 400⭐
+30 дней — 800⭐
 
-<b>Оплата Telegram Stars — премиум начисляется автоматически</b>
+<b>Оплата происходит автоматически через Telegram Stars</b>
 """
     
     if is_premium:
@@ -1483,10 +1480,10 @@ async def menu_premium(callback: CallbackQuery):
         text += "\n❌ <b>Премиум не активен</b>"
     
     text += "\n\n<b>ИЛИ БЕСПЛАТНО:</b>\n"
-    text += "• 7 рефералов → 1 дн\n"
-    text += "• 14 рефералов → 3 дн\n"
-    text += "• 25 рефералов → 10 дн\n"
-    text += "• 50 рефералов → 25 дн"
+    text += "• 7 рефералов → 1 день\n"
+    text += "• 14 рефералов → 3 дня\n"
+    text += "• 25 рефералов → 10 дней\n"
+    text += "• 50 рефералов → 25 дней"
     
     await callback.message.edit_text(
         text,
@@ -1517,8 +1514,32 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
     price = PRICES.get(days, 65)
     
     title = f"Премиум GHOST — {days} день(дней)"
-    description = f"Безлимитный поиск ников на {days} дней!"
+    description = f"Безлимитный поиск ников на {days} дней!\n\nДоступ к 5-буквенным никам и приоритетный поиск."
+    payload = f"premium_{days}_{user_id}_{int(time.time())}"
+    prices = [LabeledPrice(label=f"Премиум {days} дней", amount=price)]
     
+    # Показываем подтверждение
+    await callback.message.edit_text(
+        f"💎 <b>Подтверждение оплаты</b>\n\n"
+        f"📦 Тариф: {days} дней\n"
+        f"💰 Цена: {price} ⭐\n\n"
+        f"Вы хотите заплатить боту {price} звёзд?",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Да, заплатить", callback_data=f"pay_confirm_{days}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="menu_premium")]
+        ])
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("pay_confirm_"))
+async def pay_confirm(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    days = int(callback.data.split("_")[2])
+    price = PRICES.get(days, 65)
+    
+    title = f"Премиум GHOST — {days} день(дней)"
+    description = f"Безлимитный поиск ников на {days} дней!"
     payload = f"premium_{days}_{user_id}_{int(time.time())}"
     prices = [LabeledPrice(label=f"Премиум {days} дней", amount=price)]
     
@@ -1539,7 +1560,7 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
     except Exception as e:
         logger.error(f"Ошибка инвойса: {e}")
-        await callback.answer("❌ Ошибка платежа", show_alert=True)
+        await callback.answer(f"❌ Ошибка: {str(e)[:50]}", show_alert=True)
 
 @dp.pre_checkout_query()
 async def pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
@@ -1558,7 +1579,7 @@ async def successful_payment(message: Message):
         await message.answer(
             f"✅ <b>Премиум активирован!</b>\n\n"
             f"📦 Тариф: {days} дней\n"
-            f"💎 Теперь у вас безлимитные поиски!\n\n"
+            f"💎 Теперь у вас безлимитные поиски и доступ к 5-буквенным никам!\n\n"
             f"Приятного использования! 🎯",
             parse_mode="HTML",
             reply_markup=kb.main_menu(db.is_developer(user_id))
@@ -1758,7 +1779,7 @@ async def menu_info(callback: CallbackQuery):
 <b>Что умеет бот:</b>
 • Находит свободные 5–6 буквенные ники
 • Проверка доступности через Telegram API
-• Поиск за 15 попыток
+• Поиск за 15 попыток с видимым прогрессом
 • Рейтинг и стоимость ника
 • Запрос не тратится если ник не найден
 
@@ -1829,8 +1850,9 @@ async def main():
     logger.info("🚀 Бот GHOST - Поиск Ников запущен!")
     logger.info("👤 Разработчик: @gawuzu")
     logger.info("✅ ВСЕ ФУНКЦИИ РАБОТАЮТ!")
-    logger.info(f"✅ Поиск: {MAX_SEARCH_ATTEMPTS} попыток")
+    logger.info("✅ Поиск: 15 попыток с прогрессом")
     logger.info("✅ Запрос не тратится если ник не найден")
+    logger.info("✅ Оплата звёздами с подтверждением")
     
     try:
         await dp.start_polling(bot)

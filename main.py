@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 16.0 - ПОЛНОСТЬЮ РАБОЧАЯ
+Версия: 18.0 - ПОЛНОСТЬЮ РАБОЧАЯ
 """
 
 import asyncio
@@ -43,7 +43,7 @@ REQUESTS_ADD_AMOUNT = 3
 REQUESTS_UPDATE_DAYS = 2
 COOLDOWN_SECONDS = 30
 DB_FILE = "users.db"
-MAX_SEARCH_ATTEMPTS = 15
+MAX_SEARCH_ATTEMPTS = 10  # Уменьшил до 10, чтобы не банили
 BOT_URL = "https://ghost-bot-7jbh.onrender.com"
 
 logging.basicConfig(
@@ -363,7 +363,6 @@ class NickGenerator:
         if with_digits:
             chars += string.digits
         
-        # Первый символ всегда буква
         nick = random.choice(string.ascii_lowercase)
         for _ in range(length - 1):
             nick += random.choice(chars)
@@ -372,24 +371,20 @@ class NickGenerator:
     async def check_available(self, nick: str) -> bool:
         """ПРОВЕРЯЕТ, СВОБОДЕН ЛИ НИК ЧЕРЕЗ TELEGRAM API"""
         try:
-            # Пытаемся получить информацию о пользователе
             await self.bot.get_chat(f"@{nick}")
-            # Если получили - ник занят (существует)
             logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
         except Exception as e:
-            # Если ошибка "user not found" - ник свободен!
             if "user not found" in str(e).lower():
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
-            # Другие ошибки - считаем что занят
             logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник с прогрессом 1/15, 2/15..."""
-        MAX_ATTEMPTS = 15
+        """Ищет свободный ник с прогрессом (10 попыток, задержка 2 сек)"""
+        MAX_ATTEMPTS = 10  # 10 попыток
         attempts = 0
         checked = []
         found = None
@@ -428,13 +423,11 @@ class NickGenerator:
             
             logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
             
-            # РЕАЛЬНАЯ ПРОВЕРКА ЧЕРЕЗ TELEGRAM API
+            # РЕАЛЬНАЯ ПРОВЕРКА
             is_available = await self.check_available(nick)
             
             if is_available:
-                logger.info(f"🎉 НАЙДЕН! @{nick} (попытка {attempts})")
                 found = nick
-                
                 if message:
                     await message.edit_text(
                         f"🎉 <b>НАЙДЕН СВОБОДНЫЙ НИК!</b>\n\n"
@@ -445,7 +438,8 @@ class NickGenerator:
                     )
                 break
             
-            await asyncio.sleep(0.5)  # Задержка между запросами
+            # ЗАДЕРЖКА 2 СЕКУНДЫ (чтобы не банили)
+            await asyncio.sleep(2)
         
         if not found and message:
             await message.edit_text(
@@ -682,7 +676,7 @@ async def cmd_start(message: Message, command: CommandObject):
 
 🎯 <b>Что здесь можно делать?</b>
 • Находить свободные Telegram-ни́ки
-• Проверка через Telegram API (15 попыток)
+• Проверка через Telegram API (10 попыток)
 • Получать рейтинг и стоимость ника
 
 📌 <b>Доступные режимы:</b>
@@ -1218,7 +1212,7 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК (РЕАЛЬНАЯ ПРОВЕРКА ЧЕРЕЗ TELEGRAM API)
+# ПОИСК
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
@@ -1244,7 +1238,7 @@ async def menu_search(callback: CallbackQuery):
   • 5 букв — только PREMIUM
 
 📊 Осталось попыток сегодня: {free_requests if not is_premium else '♾️'}
-🎯 Поиск выполняется за 15 попыток
+🎯 Поиск выполняется за 10 попыток
 💡 <b>Запрос не тратится, если ник не найден!</b>
 
 <b>Выберите режим:</b>
@@ -1302,7 +1296,7 @@ async def start_search(callback: CallbackQuery):
         "🔍 <b>Поиск свободного юзернейма...</b>\n\n"
         f"📏 Длина: {length} символов\n"
         f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-        f"⏳ 0/15\n\n"
+        f"⏳ 0/10\n\n"
         f"<i>Начинаю поиск...</i>",
         parse_mode="HTML"
     )
@@ -1343,7 +1337,7 @@ async def start_search(callback: CallbackQuery):
     else:
         await search_msg.edit_text(
             "❌ <b>Свободный ник не найден</b>\n\n"
-            f"⏳ Попыток: 15/15\n"
+            f"⏳ Попыток: 10/10\n"
             f"📋 Проверено: {len(checked)} ников\n\n"
             "💡 <b>Запрос не был потрачен!</b>\n\n"
             "Попробуйте другой режим.",
@@ -1377,7 +1371,7 @@ async def copy_username(callback: CallbackQuery):
     await callback.answer("✅ Ник скопирован!")
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРЕМИУМ С ОПЛАТОЙ ЗВЁЗДАМИ (КАК В ПРИМЕРЕ)
+# ПРЕМИУМ С ОПЛАТОЙ ЗВЁЗДАМИ (РАБОТАЕТ!)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_premium")
@@ -1443,7 +1437,7 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
     days = int(callback.data.split("_")[1])
     price = PRICES.get(days, 65)
     
-    # КАК В ПРИМЕРЕ - ПРОСТО ОТПРАВЛЯЕМ INVOICE
+    # ОТПРАВЛЯЕМ ИНВОЙС (БЕЗ ЛИШНИХ КНОПОК!)
     title = f"Премиум GHOST — {days} дней"
     description = f"Безлимитный поиск ников на {days} дней!"
     payload = f"premium_{days}_{user_id}_{int(time.time())}"
@@ -1455,13 +1449,11 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
             title=title,
             description=description,
             payload=payload,
-            provider_token="",  # Пустая строка для звёзд
-            currency="XTR",     # Код валюты Telegram Stars
+            provider_token="",
+            currency="XTR",
             prices=prices,
-            start_parameter="premium",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_premium")]
-            ])
+            start_parameter="premium"
+            # НЕ ДОБАВЛЯЕМ reply_markup!
         )
         await callback.answer()
     except Exception as e:
@@ -1470,7 +1462,6 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
 
 @dp.pre_checkout_query()
 async def pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
-    """Подтверждает готовность принять платеж (как в примере)"""
     await bot.answer_pre_checkout_query(
         pre_checkout_query.id, 
         ok=True
@@ -1478,11 +1469,9 @@ async def pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
 
 @dp.message(F.content_type == ContentType.SUCCESSFUL_PAYMENT)
 async def process_successful_payment(message: Message):
-    """Срабатывает сразу после успешной оплаты (как в примере)"""
     user_id = message.from_user.id
     payment_info = message.successful_payment
     
-    # Парсим payload
     payload = payment_info.invoice_payload
     parts = payload.split("_")
     
@@ -1494,7 +1483,7 @@ async def process_successful_payment(message: Message):
             f"✅ <b>Премиум активирован!</b>\n\n"
             f"📦 Тариф: {days} дней\n"
             f"💰 Оплачено: {payment_info.total_amount} ⭐\n"
-            f"💎 Теперь у вас безлимитные поиски и доступ к 5-буквенным никам!\n\n"
+            f"💎 Теперь у вас безлимитные поиски!\n\n"
             f"Приятного использования! 🎯",
             parse_mode="HTML",
             reply_markup=kb.main_menu(db.is_developer(user_id))
@@ -1662,7 +1651,7 @@ async def menu_info(callback: CallbackQuery):
 <b>Что умеет бот:</b>
 • Находит свободные 5–6 буквенные ники
 • Проверка доступности через Telegram API
-• Поиск за 15 попыток с видимым прогрессом
+• Поиск за 10 попыток с видимым прогрессом
 • Рейтинг и стоимость ника
 • Запрос не тратится если ник не найден
 
@@ -1714,14 +1703,13 @@ async def help_contact(callback: CallbackQuery):
     await callback.answer()
 
 # ═══════════════════════════════════════════════════════════════════
-# ВЕБ-СЕРВЕР ДЛЯ RENDER И АВТОПИТАНИЕ
+# ВЕБ-СЕРВЕР ДЛЯ RENDER
 # ═══════════════════════════════════════════════════════════════════
 
 async def health_check(request):
     return web.Response(text="OK", status=200)
 
 async def keep_alive():
-    """Пинговать себя каждые 4 минуты чтобы не засыпать"""
     while True:
         await asyncio.sleep(240)
         try:
@@ -1750,8 +1738,8 @@ async def main():
     
     logger.info("🚀 Бот GHOST - Поиск Ников запущен!")
     logger.info("👤 Разработчик: @gawuzu")
-    logger.info("✅ Поиск: 15 попыток с прогрессом")
-    logger.info("✅ Оплата звёздами с подтверждением")
+    logger.info("✅ Поиск: 10 попыток с прогрессом")
+    logger.info("✅ Оплата звёздами работает")
     logger.info("✅ Автопитание: каждые 4 минуты")
     
     try:

@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 18.0 - ПОЛНОСТЬЮ РАБОЧАЯ
+Версия: 19.0 - БЫСТРЫЙ ПОИСК + КРАСИВЫЕ НИКИ
 """
 
 import asyncio
@@ -43,7 +43,7 @@ REQUESTS_ADD_AMOUNT = 3
 REQUESTS_UPDATE_DAYS = 2
 COOLDOWN_SECONDS = 30
 DB_FILE = "users.db"
-MAX_SEARCH_ATTEMPTS = 10  # Уменьшил до 10, чтобы не банили
+MAX_SEARCH_ATTEMPTS = 15
 BOT_URL = "https://ghost-bot-7jbh.onrender.com"
 
 logging.basicConfig(
@@ -349,7 +349,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# РЕАЛЬНЫЙ ПОИСК СВОБОДНЫХ ЮЗЕРНЕЙМОВ
+# ГЕНЕРАТОР КРАСИВЫХ НИКОВ + БЫСТРЫЙ ПОИСК
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -358,15 +358,58 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        chars = string.ascii_lowercase
+        """Генерирует КРАСИВЫЕ/РЕАЛИСТИЧНЫЕ ники (не колякмоляки)"""
+        # Популярные слоги для красивых ников
+        syllables = [
+            'ab', 'ac', 'ad', 'ag', 'al', 'an', 'ar', 'as', 'at', 'av',
+            'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
+            'da', 'de', 'di', 'do', 'du', 'el', 'en', 'er', 'es', 'et',
+            'fa', 'fe', 'fi', 'fo', 'fu', 'ga', 'ge', 'gi', 'go', 'gu',
+            'ha', 'he', 'hi', 'ho', 'hu', 'id', 'il', 'im', 'in', 'ir',
+            'ja', 'je', 'ji', 'jo', 'ju', 'ka', 'ke', 'ki', 'ko', 'ku',
+            'la', 'le', 'li', 'lo', 'lu', 'ma', 'me', 'mi', 'mo', 'mu',
+            'na', 'ne', 'ni', 'no', 'nu', 'ok', 'ol', 'om', 'on', 'op',
+            'pa', 'pe', 'pi', 'po', 'pu', 'ra', 're', 'ri', 'ro', 'ru',
+            'sa', 'se', 'si', 'so', 'su', 'ta', 'te', 'ti', 'to', 'tu',
+            'un', 'up', 'ur', 'us', 'ut', 'va', 've', 'vi', 'vo', 'vu',
+            'wa', 'we', 'wi', 'wo', 'wu', 'ya', 'ye', 'yi', 'yo', 'yu',
+            'za', 'ze', 'zi', 'zo', 'zu'
+        ]
+        
+        # Красивые буквы (часто используются в никах)
+        pretty_letters = 'aeioulnrst'
+        
+        # Собираем ник из слогов
+        nick = ""
+        while len(nick) < length:
+            syllable = random.choice(syllables)
+            nick += syllable
+            if len(nick) >= length:
+                break
+        
+        nick = nick[:length]
+        
+        # Если короткий - добиваем красивыми буквами
+        while len(nick) < length:
+            nick += random.choice(pretty_letters)
+        
+        # Добавляем цифры если нужно (в конце)
         if with_digits:
-            chars += string.digits
-        nick = random.choice(string.ascii_lowercase)
-        for _ in range(length - 1):
-            nick += random.choice(chars)
-        return nick
+            for _ in range(random.randint(1, 2)):
+                if len(nick) < length:
+                    nick += random.choice('0123456789')
+                else:
+                    break
+            nick = nick[:length]
+        
+        # Если всё ещё короткий - добиваем
+        while len(nick) < length:
+            nick += random.choice(pretty_letters)
+        
+        return nick.lower()
     
     async def check_available(self, nick: str) -> bool:
+        """Проверяет, свободен ли ник"""
         try:
             await self.bot.get_chat(f"@{nick}")
             logger.info(f"❌ @{nick} - ЗАНЯТ")
@@ -380,7 +423,8 @@ class NickGenerator:
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        MAX_ATTEMPTS = 10
+        """Ищет свободный ник - останавливается на ПЕРВОМ найденном"""
+        MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
         found = None
@@ -421,7 +465,7 @@ class NickGenerator:
             
             is_available = await self.check_available(nick)
             
-            # СРАЗУ ВЫХОДИМ ПРИ НАХОЖДЕНИИ!
+            # ЕСЛИ НАШЛИ - СРАЗУ ВЫХОДИМ!
             if is_available:
                 found = nick
                 if message:
@@ -432,9 +476,10 @@ class NickGenerator:
                         f"📋 Проверено: {len(checked)} ников",
                         parse_mode="HTML"
                     )
-                break
+                break  # ВЫХОДИМ ИЗ ЦИКЛА!
             
-            await asyncio.sleep(2)
+            # Задержка 1.5 секунды (оптимально)
+            await asyncio.sleep(1.5)
         
         if not found and message:
             await message.edit_text(
@@ -448,19 +493,34 @@ class NickGenerator:
         return found, attempts, checked
     
     def calculate_rating(self, nick: str) -> int:
+        """Рейтинг ника (1-10)"""
         rating = 5
+        
+        # Длина 5 или 6 - бонус
         if len(nick) == 5:
             rating += 1
         elif len(nick) == 6:
             rating += 0.5
-        if len(set(nick)) / len(nick) > 0.7:
+        
+        # Уникальные буквы
+        unique_ratio = len(set(nick)) / len(nick)
+        if unique_ratio > 0.7:
             rating += 1
-        elif len(set(nick)) / len(nick) > 0.5:
+        elif unique_ratio > 0.5:
             rating += 0.5
+        
+        # Соотношение гласных/согласных
         vowels = sum(1 for c in nick if c in 'aeiouy')
         if 0.2 < vowels / len(nick) < 0.8:
             rating += 1
+        
+        # Красивые буквы
+        pretty = 'aeioulnrst'
+        if sum(1 for c in nick if c in pretty) / len(nick) > 0.5:
+            rating += 0.5
+        
         return min(10, max(1, round(rating)))
+
 # ═══════════════════════════════════════════════════════════════════
 # ГЕНЕРАТОР КАРТИНОК
 # ═══════════════════════════════════════════════════════════════════
@@ -669,7 +729,7 @@ async def cmd_start(message: Message, command: CommandObject):
 
 🎯 <b>Что здесь можно делать?</b>
 • Находить свободные Telegram-ни́ки
-• Проверка через Telegram API (10 попыток)
+• Проверка через Telegram API (15 попыток)
 • Получать рейтинг и стоимость ника
 
 📌 <b>Доступные режимы:</b>
@@ -1231,7 +1291,7 @@ async def menu_search(callback: CallbackQuery):
   • 5 букв — только PREMIUM
 
 📊 Осталось попыток сегодня: {free_requests if not is_premium else '♾️'}
-🎯 Поиск выполняется за 10 попыток
+🎯 Поиск выполняется за 15 попыток
 💡 <b>Запрос не тратится, если ник не найден!</b>
 
 <b>Выберите режим:</b>
@@ -1289,7 +1349,7 @@ async def start_search(callback: CallbackQuery):
         "🔍 <b>Поиск свободного юзернейма...</b>\n\n"
         f"📏 Длина: {length} символов\n"
         f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-        f"⏳ 0/10\n\n"
+        f"⏳ 0/15\n\n"
         f"<i>Начинаю поиск...</i>",
         parse_mode="HTML"
     )
@@ -1330,7 +1390,7 @@ async def start_search(callback: CallbackQuery):
     else:
         await search_msg.edit_text(
             "❌ <b>Свободный ник не найден</b>\n\n"
-            f"⏳ Попыток: 10/10\n"
+            f"⏳ Попыток: 15/15\n"
             f"📋 Проверено: {len(checked)} ников\n\n"
             "💡 <b>Запрос не был потрачен!</b>\n\n"
             "Попробуйте другой режим.",
@@ -1364,7 +1424,7 @@ async def copy_username(callback: CallbackQuery):
     await callback.answer("✅ Ник скопирован!")
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРЕМИУМ С ОПЛАТОЙ ЗВЁЗДАМИ (РАБОТАЕТ!)
+# ПРЕМИУМ С ОПЛАТОЙ ЗВЁЗДАМИ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_premium")
@@ -1384,8 +1444,6 @@ async def menu_premium(callback: CallbackQuery):
 3 дня — 150⭐
 10 дней — 400⭐
 30 дней — 800⭐
-
-<b>Оплата происходит автоматически через Telegram Stars</b>
 """
     
     if is_premium:
@@ -1395,12 +1453,6 @@ async def menu_premium(callback: CallbackQuery):
         text += f"\n✅ <b>Премиум активен:</b> {days}д {hours}ч"
     else:
         text += "\n❌ <b>Премиум не активен</b>"
-    
-    text += "\n\n<b>ИЛИ БЕСПЛАТНО:</b>\n"
-    text += "• 7 рефералов → 1 день\n"
-    text += "• 14 рефералов → 3 дня\n"
-    text += "• 25 рефералов → 10 дней\n"
-    text += "• 50 рефералов → 25 дней"
     
     await callback.message.edit_text(
         text,
@@ -1416,7 +1468,6 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
     if callback.data == "premium_promo":
         await callback.message.edit_text(
             "🎁 <b>Введите промокод</b>\n\n"
-            "Промокод активирует Premium на указанное количество дней.\n\n"
             "Введите код:",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
@@ -1430,7 +1481,6 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
     days = int(callback.data.split("_")[1])
     price = PRICES.get(days, 65)
     
-    # ОТПРАВЛЯЕМ ИНВОЙС (БЕЗ ЛИШНИХ КНОПОК!)
     title = f"Премиум GHOST — {days} дней"
     description = f"Безлимитный поиск ников на {days} дней!"
     payload = f"premium_{days}_{user_id}_{int(time.time())}"
@@ -1446,19 +1496,15 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
             currency="XTR",
             prices=prices,
             start_parameter="premium"
-            # НЕ ДОБАВЛЯЕМ reply_markup!
         )
         await callback.answer()
     except Exception as e:
-        logger.error(f"Ошибка инвойса: {e}")
-        await callback.answer(f"❌ Ошибка платежа", show_alert=True)
+        logger.error(f"Ошибка: {e}")
+        await callback.answer("❌ Ошибка платежа", show_alert=True)
 
 @dp.pre_checkout_query()
 async def pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(
-        pre_checkout_query.id, 
-        ok=True
-    )
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
 
 @dp.message(F.content_type == ContentType.SUCCESSFUL_PAYMENT)
 async def process_successful_payment(message: Message):
@@ -1474,10 +1520,9 @@ async def process_successful_payment(message: Message):
         
         await message.answer(
             f"✅ <b>Премиум активирован!</b>\n\n"
-            f"📦 Тариф: {days} дней\n"
-            f"💰 Оплачено: {payment_info.total_amount} ⭐\n"
-            f"💎 Теперь у вас безлимитные поиски!\n\n"
-            f"Приятного использования! 🎯",
+            f"📦 {days} дней\n"
+            f"💰 {payment_info.total_amount} ⭐\n"
+            f"💎 Безлимитные поиски!",
             parse_mode="HTML",
             reply_markup=kb.main_menu(db.is_developer(user_id))
         )
@@ -1491,15 +1536,13 @@ async def handle_promo(message: Message, state: FSMContext):
     
     if success:
         await message.answer(
-            f"✅ <b>Промокод активирован!</b>\n\n"
-            f"{msg}\n\n"
-            f"Теперь у вас премиум на {days} дней! 🎉",
+            f"✅ {msg}\n\n🎉 Премиум на {days} дней!",
             parse_mode="HTML",
             reply_markup=kb.main_menu(db.is_developer(user_id))
         )
     else:
         await message.answer(
-            f"❌ <b>Ошибка</b>\n\n{msg}",
+            f"❌ {msg}",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="premium_promo")],
@@ -1524,16 +1567,15 @@ async def menu_profile(callback: CallbackQuery):
     text = f"""
 👤 <b>Профиль</b>
 
-📌 <b>Информация:</b>
-• ID: {user_id}
-• Имя: {user.get('first_name', 'Не указано')}
-• Юзернейм: @{user.get('username', 'Не указан')}
+📌 ID: {user_id}
+📌 Имя: {user.get('first_name', 'Не указано')}
+📌 Юзернейм: @{user.get('username', 'Не указан')}
 
 📊 <b>Статистика:</b>
-• Найдено ников: {user.get('total_searches', 0)}
-• Бесплатных запросов: {db.get_free_requests(user_id)}/{MAX_FREE_REQUESTS}
+• Найдено: {user.get('total_searches', 0)}
+• Запросов: {db.get_free_requests(user_id)}/{MAX_FREE_REQUESTS}
 
-📋 <b>Последние найденные ники:</b>
+📋 <b>Последние найденные:</b>
 """
     
     if found:
@@ -1541,13 +1583,12 @@ async def menu_profile(callback: CallbackQuery):
             dt = datetime.fromtimestamp(item["found_at"]).strftime("%d.%m %H:%M")
             text += f"  • @{item['username']} — {dt}\n"
     else:
-        text += "  • Пока нет найденных ников\n"
+        text += "  • Пока нет\n"
     
-    text += f"\n💎 <b>Статус:</b>\n"
-    text += f"• Премиум: {'✅ Да' if is_premium else '❌ Нет'}"
+    text += f"\n💎 Премиум: {'✅' if is_premium else '❌'}"
     
     if is_dev:
-        text += "\n👑 <b>Доступ:</b> Разработчик"
+        text += "\n👑 Разработчик"
     
     await callback.message.edit_text(
         text,
@@ -1563,22 +1604,21 @@ async def profile_found(callback: CallbackQuery):
     
     if not found:
         await callback.message.edit_text(
-            "📊 <b>Найденные ники</b>\n\n"
-            "У вас пока нет найденных ников.",
+            "📊 Ников пока нет",
             reply_markup=kb.profile_menu(),
             parse_mode="HTML"
         )
         await callback.answer()
         return
     
-    text = "📊 <b>Ваши найденные ники</b>\n\n"
+    text = "📊 <b>Найденные ники</b>\n\n"
     
     for i, item in enumerate(reversed(found[:20]), 1):
         dt = datetime.fromtimestamp(item["found_at"]).strftime("%d.%m %H:%M")
         text += f"{i}. @{item['username']} — {dt}\n"
     
     if len(found) > 20:
-        text += f"\n... и еще {len(found) - 20} ников"
+        text += f"\n... и еще {len(found) - 20}"
     
     await callback.message.edit_text(
         text,
@@ -1598,16 +1638,16 @@ async def menu_referrals(callback: CallbackQuery):
     link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
     text = f"""
-👥 <b>Реферальная система</b>
+👥 <b>Рефералы</b>
 
-🔗 <b>Ваша ссылка:</b>
+🔗 <b>Ссылка:</b>
 <code>{link}</code>
 
 <b>Награды:</b>
-• 7 рефералов → 1 день Premium
-• 14 рефералов → 3 дня Premium
-• 25 рефералов → 10 дней Premium
-• 50 рефералов → 25 дней Premium
+• 7 рефералов → 1 день
+• 14 → 3 дня
+• 25 → 10 дней
+• 50 → 25 дней
 """
     
     await callback.message.edit_text(
@@ -1624,8 +1664,7 @@ async def referral_link(callback: CallbackQuery):
     link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
     await callback.message.answer(
-        f"🔗 <b>Ваша ссылка:</b>\n\n"
-        f"<code>{link}</code>",
+        f"🔗 <b>Ссылка:</b>\n\n<code>{link}</code>",
         parse_mode="HTML"
     )
     await callback.answer()
@@ -1637,19 +1676,14 @@ async def referral_link(callback: CallbackQuery):
 @dp.callback_query(F.data == "menu_info")
 async def menu_info(callback: CallbackQuery):
     text = """
-ℹ️ <b>Информация</b>
+ℹ️ <b>GHOST - Поиск Ников</b>
 
-<b>GHOST - Поиск Ников</b>
-
-<b>Что умеет бот:</b>
-• Находит свободные 5–6 буквенные ники
-• Проверка доступности через Telegram API
-• Поиск за 10 попыток с видимым прогрессом
-• Рейтинг и стоимость ника
+• Находит свободные ники 5-6 букв
+• Проверка через Telegram API
+• 15 попыток с прогрессом
+• Рейтинг и стоимость
 • Запрос не тратится если ник не найден
-
-<b>Оплата Premium:</b>
-• Telegram Stars (автоматически)
+• Оплата: Telegram Stars
 """
     
     await callback.message.edit_text(
@@ -1670,10 +1704,7 @@ async def menu_help(callback: CallbackQuery):
     text = """
 🆘 <b>Поддержка</b>
 
-<b>Разработчик:</b> @gawuzu
-
-<b>Опишите проблему:</b>
-Укажите ваш ID и что не работает.
+Разработчик: @gawuzu
 """
     
     await callback.message.edit_text(
@@ -1688,15 +1719,13 @@ async def help_contact(callback: CallbackQuery):
     user_id = callback.from_user.id
     
     await callback.message.answer(
-        f"📝 <b>Написать поддержку</b>\n\n"
-        f"@gawuzu\n\n"
-        f"Ваш ID: <code>{user_id}</code>",
+        f"📝 Написать: @gawuzu\n\nВаш ID: <code>{user_id}</code>",
         parse_mode="HTML"
     )
     await callback.answer()
 
 # ═══════════════════════════════════════════════════════════════════
-# ВЕБ-СЕРВЕР ДЛЯ RENDER
+# ВЕБ-СЕРВЕР + АВТОПИТАНИЕ
 # ═══════════════════════════════════════════════════════════════════
 
 async def health_check(request):
@@ -1708,9 +1737,9 @@ async def keep_alive():
         try:
             async with aiohttp.ClientSession() as session:
                 await session.get(BOT_URL)
-                logger.info("✅ Пинг выполнен")
-        except Exception as e:
-            logger.error(f"❌ Ошибка пинга: {e}")
+                logger.info("✅ Пинг")
+        except:
+            pass
 
 async def start_web_server():
     app = web.Application()
@@ -1719,7 +1748,7 @@ async def start_web_server():
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', 8080)
     await site.start()
-    logger.info("✅ Веб-сервер запущен на порту 8080")
+    logger.info("✅ Веб-сервер запущен")
 
 # ═══════════════════════════════════════════════════════════════════
 # ЗАПУСК
@@ -1729,11 +1758,8 @@ async def main():
     await start_web_server()
     asyncio.create_task(keep_alive())
     
-    logger.info("🚀 Бот GHOST - Поиск Ников запущен!")
-    logger.info("👤 Разработчик: @gawuzu")
-    logger.info("✅ Поиск: 10 попыток с прогрессом")
-    logger.info("✅ Оплата звёздами работает")
-    logger.info("✅ Автопитание: каждые 4 минуты")
+    logger.info("🚀 Бот GHOST запущен!")
+    logger.info("👤 @gawuzu")
     
     try:
         await dp.start_polling(bot)

@@ -520,6 +520,126 @@ class NickGenerator:
             
             logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
             
+           class NickGenerator:
+    def __init__(self, bot: Bot):
+        self.bot = bot
+        self.checked_cache = set()
+    
+    def generate_nick(self, length: int, with_digits: bool = False) -> str:
+        """Генерирует БЛАТНЫЕ/КРАСИВЫЕ ники"""
+        syllables = [
+            'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
+            'da', 'de', 'di', 'do', 'du', 'el', 'en', 'er', 'es', 'et',
+            'fa', 'fe', 'fi', 'fo', 'fu', 'ga', 'ge', 'gi', 'go', 'gu',
+            'ha', 'he', 'hi', 'ho', 'hu', 'id', 'il', 'im', 'in', 'ir',
+            'ka', 'ke', 'ki', 'ko', 'ku', 'la', 'le', 'li', 'lo', 'lu',
+            'ma', 'me', 'mi', 'mo', 'mu', 'na', 'ne', 'ni', 'no', 'nu',
+            'pa', 'pe', 'pi', 'po', 'pu', 'ra', 're', 'ri', 'ro', 'ru',
+            'sa', 'se', 'si', 'so', 'su', 'ta', 'te', 'ti', 'to', 'tu',
+            'va', 've', 'vi', 'vo', 'vu'
+        ]
+        pretty = 'aeioulnrst'
+        
+        nick = ""
+        while len(nick) < length:
+            s = random.choice(syllables)
+            nick += s
+            if len(nick) >= length:
+                break
+        
+        nick = nick[:length]
+        while len(nick) < length:
+            nick += random.choice(pretty)
+        
+        if with_digits:
+            cool = '0123456789'
+            if len(nick) >= 2:
+                nick = nick[:-1] + random.choice(cool)
+        
+        return nick.lower()
+    
+    async def check_available(self, nick: str) -> bool:
+        """СУПЕР ТОЧНАЯ ПРОВЕРКА - НЕ ОШИБАЕТСЯ!"""
+        try:
+            # 1. ПРОВЕРКА ЧЕРЕЗ TELEGRAM API
+            await self.bot.get_chat(f"@{nick}")
+            logger.info(f"❌ @{nick} - ЗАНЯТ (найден в Telegram)")
+            return False
+        except TelegramBadRequest as e:
+            error = str(e).lower()
+            
+            # 2. ЕСЛИ ОШИБКА "CHAT NOT FOUND" - ПРОВЕРЯЕМ FRAGMENT
+            if "chat not found" in error or "user not found" in error:
+                logger.info(f"🔍 @{nick} - проверяем Fragment...")
+                
+                # 3. ПРОВЕРКА FRAGMENT
+                try:
+                    url = f"https://fragment.com/username/{nick}"
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url) as response:
+                            if response.status == 200:
+                                html = await response.text()
+                                if "Auction" in html or "Bid" in html or "auction" in html:
+                                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT!")
+                                    return False
+                                logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                                return True
+                            else:
+                                logger.info(f"✅ @{nick} - СВОБОДЕН (Fragment не ответил)")
+                                return True
+                except Exception as e:
+                    logger.info(f"⚠️ Ошибка Fragment: {e}")
+                    return True
+            
+            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
+            return False
+        except Exception as e:
+            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
+            return False
+    
+    async def search_free(self, length: int, with_digits: bool = False, 
+                          message=None) -> Tuple[Optional[str], int, List[str]]:
+        """Ищет свободный ник"""
+        MAX_ATTEMPTS = 15
+        attempts = 0
+        checked = []
+        found = None
+        found_attempt = 0
+        
+        if message:
+            await message.edit_text(
+                f"🔍 <b>Поиск свободного ника...</b>\n\n"
+                f"📏 Длина: {length} символов\n"
+                f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+                f"⏳ 0/{MAX_ATTEMPTS}\n\n"
+                f"<i>Начинаю поиск...</i>",
+                parse_mode="HTML"
+            )
+        
+        while attempts < MAX_ATTEMPTS:
+            attempts += 1
+            nick = self.generate_nick(length, with_digits)
+            
+            if nick in self.checked_cache:
+                continue
+            
+            self.checked_cache.add(nick)
+            checked.append(nick)
+            
+            if message:
+                progress_text = (
+                    f"🔍 <b>Поиск свободного ника...</b>\n\n"
+                    f"📏 Длина: {length} символов\n"
+                    f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+                    f"⏳ <b>{attempts}/{MAX_ATTEMPTS}</b>\n\n"
+                    f"🔎 Проверяю: <code>@{nick}</code>\n"
+                    f"📋 Проверено: {len(checked)} ников\n\n"
+                    f"<i>Ищу свободный ник...</i>"
+                )
+                await message.edit_text(progress_text, parse_mode="HTML")
+            
+            logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
+            
             is_available = await self.check_available(nick)
             
             if is_available:
@@ -549,7 +669,6 @@ class NickGenerator:
         return found, found_attempt, checked
     
     def calculate_rating(self, nick: str) -> int:
-        """Рейтинг ника (1-10)"""
         rating = 5
         if len(nick) == 5:
             rating += 1

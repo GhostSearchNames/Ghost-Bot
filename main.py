@@ -1,9 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 24.0 - ПОИСК ИСПРАВЛЕН
-- Все функции сохранены
-- Поиск через get_chat (рабочий)
-- Останавливается на первом свободном
+Версия: 26.0 - ИСПРАВЛЕНА ВЫДАЧА ПРЕМИУМ
 """
 
 import asyncio
@@ -16,6 +13,7 @@ import sqlite3
 import hashlib
 import re
 import shutil
+import json
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from io import BytesIO
@@ -244,7 +242,12 @@ class Database:
             new_until = current_until + (days * 86400)
         else:
             new_until = int(time.time()) + (days * 86400)
+        # Обновляем поле premium_until
         self.update_user_field(user_id, "premium_until", new_until)
+        # Принудительно сохраняем
+        self.conn.commit()
+        self.backup_db()
+        logger.info(f"✅ Премиум выдан пользователю {user_id} на {days} дней (до {datetime.fromtimestamp(new_until)})")
     
     def get_free_requests(self, user_id: int) -> int:
         user = self.get_user(user_id)
@@ -401,7 +404,28 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + ПОИСК (РАБОЧИЙ ЧЕРЕЗ get_chat)
+# ПРОВЕРКА НА АУКЦИОНЕ (Fragment)
+# ═══════════════════════════════════════════════════════════════════
+
+async def check_fragment_auction(username: str) -> bool:
+    """Проверяет, выставлен ли ник на аукционе Fragment"""
+    try:
+        # Fragment API для проверки аукциона
+        url = f"https://fragment.com/username/{username}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    html = await response.text()
+                    # Проверяем наличие "Auction" или "Bid" на странице
+                    if "Auction" in html or "Bid" in html:
+                        return True
+                return False
+    except Exception as e:
+        logger.error(f"Ошибка проверки Fragment: {e}")
+        return False
+
+# ═══════════════════════════════════════════════════════════════════
+# ГЕНЕРАТОР НИКОВ + ПОИСК
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -453,32 +477,21 @@ class NickGenerator:
         return nick.lower()
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК ЧЕРЕЗ get_chat (РАБОЧИЙ)"""
+        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК ЧЕРЕЗ get_chat"""
         try:
-            # Пытаемся получить информацию о пользователе
             await self.bot.get_chat(f"@{nick}")
-            # Если получили - ник занят
             logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
         except Exception as e:
             error_msg = str(e).lower()
-            # Если ошибка "chat not found" - ник СВОБОДЕН!
-            if "chat not found" in error_msg:
+            if "chat not found" in error_msg or "user not found" in error_msg:
+                # Проверяем, не на аукционе ли
+                on_auction = await check_fragment_auction(nick)
+                if on_auction:
+                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ!")
+                    return False
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
-            # Если ошибка "user not found" - ник СВОБОДЕН!
-            if "user not found" in error_msg:
-                logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                return True
-            # Если ошибка "bot was blocked" - ник занят
-            if "bot was blocked" in error_msg:
-                logger.info(f"❌ @{nick} - ЗАНЯТ (бот заблокирован)")
-                return False
-            # Если ошибка "flood" - считаем занятым
-            if "flood" in error_msg:
-                logger.info(f"⚠️ @{nick} - FLOOD, считаем занятым")
-                return False
-            # Все остальные ошибки - считаем занятым
             logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
             return False
     
@@ -527,7 +540,6 @@ class NickGenerator:
             
             is_available = await self.check_available(nick)
             
-            # ЕСЛИ НАШЛИ - СРАЗУ ВЫХОДИМ!
             if is_available:
                 found = nick
                 found_attempt = attempts
@@ -541,7 +553,6 @@ class NickGenerator:
                     )
                 break
             
-            # Задержка 1.5 секунды
             await asyncio.sleep(1.5)
         
         if not found and message:
@@ -1246,8 +1257,16 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     target_user = db.get_user(target_id)
     username = target_user.get("username", f"user{target_id}")
     
+    # Проверяем, что премиум действительно сохранился
+    premium_until = db.get_user(target_id).get("premium_until", 0)
+    premium_days = (premium_until - int(time.time())) // 86400 if premium_until > 0 else 0
+    
     await message.answer(
-        f"✅ Премиум выдан!\n\n👤 @{username}\n📅 {days} дней",
+        f"✅ <b>Премиум выдан!</b>\n\n"
+        f"👤 @{username}\n"
+        f"📅 {days} дней\n"
+        f"✅ Статус: активен на {premium_days} дней\n"
+        f"🕐 До: {datetime.fromtimestamp(premium_until).strftime('%d.%m.%Y %H:%M')}",
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1255,7 +1274,9 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     try:
         await bot.send_message(
             target_id,
-            f"🎉 Вам выдан премиум!\n📅 {days} дней",
+            f"🎉 <b>Вам выдан премиум!</b>\n\n"
+            f"📅 {days} дней\n"
+            f"💎 Теперь доступны все функции!",
             parse_mode="HTML"
         )
     except:
@@ -1306,7 +1327,7 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК (РАБОЧИЙ)
+# ПОИСК
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
@@ -1326,6 +1347,7 @@ async def menu_search(callback: CallbackQuery):
 
 ✅ Каждый найденный ник проходит проверку:
   • Telegram — не занят профилем, каналом или ботом
+  • Fragment — не выставлен на аукцион
 
 📌 <b>Доступные режимы:</b>
   • 6 букв — бесплатно
@@ -1405,7 +1427,7 @@ async def start_search(callback: CallbackQuery):
         db.add_found_username(user_id, nick)
         
         rating = generator.calculate_rating(nick)
-        price_usd = rating * random.randint(5, 50)
+        price_usd = random.randint(7, 11)
         
         img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
         
@@ -1447,19 +1469,19 @@ async def noop_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "search_skip")
 async def search_skip(callback: CallbackQuery):
+    """Пропустить и вернуться в меню поиска"""
     await menu_search(callback)
 
 @dp.callback_query(F.data.startswith("copy_"))
 async def copy_username(callback: CallbackQuery):
     nick = callback.data.split("_")[1]
     
+    await callback.answer(f"✅ @{nick} скопирован!", show_alert=True)
+    
     await callback.message.answer(
-        f"📋 <b>Скопируйте ник:</b>\n\n"
-        f"<code>@{nick}</code>\n\n"
-        f"Используйте его в Telegram! 🎯",
+        f"📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
         parse_mode="HTML"
     )
-    await callback.answer("✅ Ник скопирован!")
 
 # ═══════════════════════════════════════════════════════════════════
 # ПРЕМИУМ
@@ -1555,8 +1577,15 @@ async def process_successful_payment(message: Message):
         days = int(parts[1])
         db.add_premium(user_id, days)
         
+        # Проверяем сохранение
+        premium_until = db.get_user(user_id).get("premium_until", 0)
+        
         await message.answer(
-            f"✅ Премиум активирован!\n\n📦 {days} дней\n💰 {payment_info.total_amount} ⭐\n💎 Безлимитные поиски!",
+            f"✅ <b>Премиум активирован!</b>\n\n"
+            f"📦 {days} дней\n"
+            f"💰 {payment_info.total_amount} ⭐\n"
+            f"💎 Безлимитные поиски!\n"
+            f"🕐 До: {datetime.fromtimestamp(premium_until).strftime('%d.%m.%Y %H:%M')}",
             parse_mode="HTML",
             reply_markup=kb.main_menu(db.is_developer(user_id))
         )
@@ -1619,7 +1648,13 @@ async def menu_profile(callback: CallbackQuery):
     else:
         text += "  • Пока нет\n"
     
-    text += f"\n💎 Премиум: {'✅' if is_premium else '❌'}"
+    if is_premium:
+        remaining = db.get_premium_remaining(user_id)
+        days = remaining // 86400
+        hours = (remaining % 86400) // 3600
+        text += f"\n💎 Премиум: ✅ ({days}д {hours}ч)"
+    else:
+        text += "\n💎 Премиум: ❌"
     
     if is_dev:
         text += "\n👑 Разработчик"
@@ -1794,7 +1829,8 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
-    logger.info("✅ Поиск через get_chat (рабочий)")
+    logger.info("✅ Поиск с проверкой Fragment")
+    logger.info("✅ Цена: 7-11$")
     logger.info("✅ База данных сохраняется")
     
     try:

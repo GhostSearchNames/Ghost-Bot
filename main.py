@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 34.0 - С ВИДИМЫМ ПРОГРЕССОМ
+Версия: 35.0 - РАБОТАЕТ!
 """
 
 import asyncio
@@ -56,123 +56,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
-# ═══════════════════════════════════════════════════════════════════
-# ЯЗЫКИ
-# ═══════════════════════════════════════════════════════════════════
-
-LANGUAGES = {
-    "ru": {
-        "name": "🇷🇺 Русский",
-        "welcome": "👻 <b>Добро пожаловать в GHOST - Поиск Ников!</b>\n\nПривет, {name}! 👋\n\n🎯 <b>Что здесь можно делать?</b>\n• Находить свободные Telegram-ни́ки\n• Двойная проверка: API + Web\n• Получать рейтинг и стоимость ника\n\n📌 <b>Доступные режимы:</b>\n• 6 букв — бесплатно\n• 5 букв — только PREMIUM\n\n📌 <b>Для новичков:</b>\n• {requests} бесплатных поисков в день\n• После каждого поиска кд 30 секунд\n• Запросы обновляются каждые 2 дня (+3)\n• <b>Запрос не тратится, если ник не найден!</b>\n\n💎 <b>Премиум:</b>\n• Безлимитные поиски\n• Доступ к 5-буквенным никам\n\n<i>Разработчик: @gawuzu</i>",
-        "search": "🔍 ПОИСК ЮЗЕРНЕЙМА",
-        "search_desc": "✅ Двойная проверка:\n  • Telegram API — не занят профилем\n  • Web-страница — не на аукционе Fragment\n\n📌 Доступные режимы:\n  • 6 букв — бесплатно\n  • 5 букв — только PREMIUM\n\n📊 Осталось попыток: {requests}\n🎯 Поиск за 15 попыток\n💡 Запрос не тратится, если ник не найден!\n\n<b>Выберите режим:</b>",
-        "premium": "💎 ПРЕМИУМ ПОДПИСКА\n\n<b>ФУНКЦИИ:</b>\n• Безлимитный поиск\n• Доступ к 5-буквенным никам\n\n<b>ЦЕНЫ:</b>\n1 день — 65⭐\n3 дня — 150⭐\n10 дней — 400⭐\n30 дней — 800⭐",
-        "profile": "👤 ПРОФИЛЬ\n\n📌 ID: {id}\n📌 Имя: {name}\n📌 Юзернейм: @{username}\n\n📊 СТАТИСТИКА:\n• Найдено: {found}\n• Запросов: {requests}/{max}\n\n📋 Последние найденные:\n{nicks}\n\n💎 Премиум: {premium}",
-        "referral": "👥 РЕФЕРАЛЫ\n\n🔗 Ссылка:\n<code>{link}</code>\n\n<b>Награды:</b>\n• 7 → 1 день\n• 14 → 3 дня\n• 25 → 10 дней\n• 50 → 25 дней",
-        "info": "ℹ️ GHOST - Поиск Ников\n\n• Находит свободные ники 5-6 букв\n• Двойная проверка: API + Web\n• 15 попыток с прогрессом\n• Рейтинг и цена в $\n• Запрос не тратится если ник не найден\n• Оплата: Telegram Stars",
-        "help": "🆘 ПОДДЕРЖКА\n\nРазработчик: @gawuzu",
-        "found": "✅ Найден свободный ник!\n\n👤 Юзернейм: @{nick}\n📏 Длина: {length} символов\n{with_digits}⭐ Рейтинг: {rating}/10\n💰 Ценность: ${price}\n🎯 Найден за: {attempts} попыток",
-        "not_found": "❌ Свободный ник не найден\n\n⏳ Попыток: 15/15\n📋 Проверено: {checked} ников\n\n💡 Запрос не был потрачен!",
-        "copy": "📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
-        "premium_active": "\n✅ Активен: {days}д {hours}ч",
-        "premium_inactive": "\n❌ Не активен",
-        "dev_panel": "👑 ПАНЕЛЬ РАЗРАБОТЧИКА\n\nВыберите раздел:",
-        "dev_stats": "📊 СТАТИСТИКА БОТА\n\n👥 Пользователи: {users}\n🔍 Всего поисков: {searches}\n💎 Премиум: {premium}",
-        "dev_users": "👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\nВсего: {total}\n\n{users}",
-        "dev_broadcast": "📢 РАССЫЛКА\n\nОтправьте сообщение для рассылки:",
-        "dev_promos": "🎁 УПРАВЛЕНИЕ ПРОМОКОДАМИ",
-        "dev_promo_create": "🎁 СОЗДАТЬ ПРОМОКОД\n\nВведите код (буквы и цифры):",
-        "dev_promo_list": "📋 СПИСОК ПРОМОКОДОВ",
-        "dev_promo_delete": "❌ УДАЛИТЬ ПРОМОКОД\n\nВведите код:",
-        "dev_give_premium": "💎 ВЫДАТЬ ПРЕМИУМ\n\nВведите ID пользователя:",
-        "dev_give_requests": "📦 ВЫДАТЬ ЗАПРОСЫ\n\nВведите ID пользователя:",
-        "premium_given": "✅ Премиум выдан!\n\n👤 @{username}\n📅 {days} дней\n🕐 До: {until}",
-        "requests_given": "✅ Запросы выданы!\n\n👤 @{username}\n📊 +{count} запросов",
-        "promo_created": "✅ Промокод создан!\n\n📌 Код: <code>{code}</code>\n📅 {days} дней\n👥 Лимит: {limit}",
-        "promo_deleted": "✅ Промокод {code} удален!",
-        "promo_not_found": "❌ Промокод {code} не найден!",
-        "choose_language": "🌍 <b>Выберите язык / Choose language / Виберіть мову / Выберыце мову / 选择语言 / Wähle Sprache:</b>",
-        "searching": "🔍 Поиск свободного ника...\n\n📏 Длина: {length} символов\n🔢 С цифрами: {digits}\n⏳ 0/{max}\n\n<i>Начинаю поиск...</i>",
-        "search_progress": "🔎 <b>Поиск свободного юзернейма...</b>\n\nПопытка: <code>{attempt}/{max}</code>\nПроверяю: <code>@{nick}</code>\n📋 Проверено: {checked} ников",
-        "search_found": "🎉 НАЙДЕН СВОБОДНЫЙ НИК!\n\n👤 <code>@{nick}</code>\n🎯 Найден на попытке {attempt}/{max}\n📋 Проверено: {checked} ников"
-    },
-    "en": {
-        "name": "🇬🇧 English",
-        "welcome": "👻 <b>Welcome to GHOST - Nick Finder!</b>\n\nHello, {name}! 👋\n\n🎯 <b>What can you do?</b>\n• Find free Telegram nicknames\n• Double check: API + Web\n• Get rating and price\n\n📌 <b>Available modes:</b>\n• 6 letters — free\n• 5 letters — only PREMIUM\n\n📌 <b>For beginners:</b>\n• {requests} free searches per day\n• 30 sec cooldown after each search\n• Requests reset every 2 days (+3)\n• <b>Request not wasted if not found!</b>\n\n💎 <b>Premium:</b>\n• Unlimited searches\n• Access to 5-letter nicks\n\n<i>Developer: @gawuzu</i>",
-        "search": "🔍 SEARCH USERNAME",
-        "search_desc": "✅ Double check:\n  • Telegram API — not occupied\n  • Web-page — not on Fragment auction\n\n📌 Available modes:\n  • 6 letters — free\n  • 5 letters — only PREMIUM\n\n📊 Remaining attempts: {requests}\n🎯 Search for 15 attempts\n💡 Request not wasted if not found!\n\n<b>Choose mode:</b>",
-        "premium": "💎 PREMIUM SUBSCRIPTION\n\n<b>FEATURES:</b>\n• Unlimited search\n• Access to 5-letter nicks\n\n<b>PRICES:</b>\n1 day — 65⭐\n3 days — 150⭐\n10 days — 400⭐\n30 days — 800⭐",
-        "profile": "👤 PROFILE\n\n📌 ID: {id}\n📌 Name: {name}\n📌 Username: @{username}\n\n📊 STATISTICS:\n• Found: {found}\n• Requests: {requests}/{max}\n\n📋 Last found:\n{nicks}\n\n💎 Premium: {premium}",
-        "referral": "👥 REFERRALS\n\n🔗 Link:\n<code>{link}</code>\n\n<b>Rewards:</b>\n• 7 → 1 day\n• 14 → 3 days\n• 25 → 10 days\n• 50 → 25 days",
-        "info": "ℹ️ GHOST - Nick Finder\n\n• Finds free 5-6 letter nicks\n• Double check: API + Web\n• 15 attempts with progress\n• Rating and price in $\n• Request not wasted if not found\n• Payment: Telegram Stars",
-        "help": "🆘 SUPPORT\n\nDeveloper: @gawuzu",
-        "found": "✅ Free nickname found!\n\n👤 Username: @{nick}\n📏 Length: {length} letters\n{with_digits}⭐ Rating: {rating}/10\n💰 Value: ${price}\n🎯 Found in: {attempts} attempts",
-        "not_found": "❌ Free nickname not found\n\n⏳ Attempts: 15/15\n📋 Checked: {checked} nicks\n\n💡 Request was not wasted!",
-        "copy": "📋 <code>@{nick}</code>\n\n✅ Nickname copied! Use it in Telegram.",
-        "premium_active": "\n✅ Active: {days}d {hours}h",
-        "premium_inactive": "\n❌ Not active",
-        "dev_panel": "👑 DEVELOPER PANEL\n\nChoose section:",
-        "dev_stats": "📊 BOT STATISTICS\n\n👥 Users: {users}\n🔍 Total searches: {searches}\n💎 Premium: {premium}",
-        "dev_users": "👥 USERS LIST\n\nTotal: {total}\n\n{users}",
-        "dev_broadcast": "📢 BROADCAST\n\nSend message for broadcast:",
-        "dev_promos": "🎁 PROMO CODES MANAGEMENT",
-        "dev_promo_create": "🎁 CREATE PROMO CODE\n\nEnter code (letters and numbers):",
-        "dev_promo_list": "📋 PROMO CODES LIST",
-        "dev_promo_delete": "❌ DELETE PROMO CODE\n\nEnter code:",
-        "dev_give_premium": "💎 GIVE PREMIUM\n\nEnter user ID:",
-        "dev_give_requests": "📦 GIVE REQUESTS\n\nEnter user ID:",
-        "premium_given": "✅ Premium given!\n\n👤 @{username}\n📅 {days} days\n🕐 Until: {until}",
-        "requests_given": "✅ Requests given!\n\n👤 @{username}\n📊 +{count} requests",
-        "promo_created": "✅ Promo code created!\n\n📌 Code: <code>{code}</code>\n📅 {days} days\n👥 Limit: {limit}",
-        "promo_deleted": "✅ Promo code {code} deleted!",
-        "promo_not_found": "❌ Promo code {code} not found!",
-        "choose_language": "🌍 <b>Choose language / Выберите язык / Виберіть мову / Выберыце мову / 选择语言 / Wähle Sprache:</b>",
-        "searching": "🔍 Searching for free nickname...\n\n📏 Length: {length} letters\n🔢 With digits: {digits}\n⏳ 0/{max}\n\n<i>Starting search...</i>",
-        "search_progress": "🔎 <b>Searching for free username...</b>\n\nAttempt: <code>{attempt}/{max}</code>\nChecking: <code>@{nick}</code>\n📋 Checked: {checked} nicks",
-        "search_found": "🎉 FREE NICKNAME FOUND!\n\n👤 <code>@{nick}</code>\n🎯 Found on attempt {attempt}/{max}\n📋 Checked: {checked} nicks"
-    }
-}
-
-# ═══════════════════════════════════════════════════════════════════
-# КЛАСС ДЛЯ РАБОТЫ С ЯЗЫКАМИ
-# ═══════════════════════════════════════════════════════════════════
-
-class LanguageManager:
-    def __init__(self):
-        self.user_lang = {}
-    
-    def get_lang(self, user_id: int) -> str:
-        return self.user_lang.get(user_id, "ru")
-    
-    def set_lang(self, user_id: int, lang: str):
-        self.user_lang[user_id] = lang
-    
-    def get_text(self, user_id: int, key: str, **kwargs) -> str:
-        lang = self.get_lang(user_id)
-        text = LANGUAGES.get(lang, LANGUAGES["ru"]).get(key, key)
-        try:
-            return text.format(**kwargs)
-        except:
-            return text
-
-lang_manager = LanguageManager()
-
-# ═══════════════════════════════════════════════════════════════════
-# СОСТОЯНИЯ FSM
-# ═══════════════════════════════════════════════════════════════════
-
-class PromoStates(StatesGroup):
-    waiting_for_promo = State()
-
-class DevStates(StatesGroup):
-    waiting_for_user_id = State()
-    waiting_for_days = State()
-    waiting_for_count = State()
-    waiting_for_promo_code = State()
-    waiting_for_promo_days = State()
-    waiting_for_promo_limit = State()
-    waiting_for_broadcast = State()
 
 # ═══════════════════════════════════════════════════════════════════
 # БАЗА ДАННЫХ (SQLite)
@@ -239,8 +122,7 @@ class Database:
                 ban_status INTEGER DEFAULT 0,
                 ban_reason TEXT,
                 referral_earnings INTEGER DEFAULT 0,
-                is_developer INTEGER DEFAULT 0,
-                language TEXT DEFAULT 'ru'
+                is_developer INTEGER DEFAULT 0
             )
         ''')
         
@@ -297,8 +179,7 @@ class Database:
                 "ban_status": bool(row[10]),
                 "ban_reason": row[11] or "",
                 "referral_earnings": row[12] or 0,
-                "is_developer": bool(row[13]) if len(row) > 13 else False,
-                "language": row[14] if len(row) > 14 else "ru"
+                "is_developer": bool(row[13]) if len(row) > 13 else False
             }
         else:
             current_time = int(time.time())
@@ -308,12 +189,12 @@ class Database:
                     user_id, username, first_name, registered_at,
                     free_requests, free_requests_reset, free_requests_last_update,
                     premium_until, last_search, total_searches,
-                    ban_status, ban_reason, referral_earnings, is_developer, language
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ban_status, ban_reason, referral_earnings, is_developer
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user_id, "", "", current_time,
                 MAX_FREE_REQUESTS, current_time + 86400, current_time,
-                0, 0, 0, 0, "", 0, is_dev, "ru"
+                0, 0, 0, 0, "", 0, is_dev
             ))
             self.conn.commit()
             self.backup_db()
@@ -438,14 +319,6 @@ class Database:
     def set_developer(self, user_id: int):
         self.update_user_field(user_id, "is_developer", 1)
     
-    def get_language(self, user_id: int) -> str:
-        user = self.get_user(user_id)
-        return user.get("language", "ru")
-    
-    def set_language(self, user_id: int, lang: str):
-        self.update_user_field(user_id, "language", lang)
-        lang_manager.set_lang(user_id, lang)
-    
     def create_promo(self, code: str, days: int, max_uses: int, created_by: int) -> bool:
         try:
             self.cursor.execute('''
@@ -513,7 +386,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + ПОИСК (С ВИДИМЫМ ПРОГРЕССОМ)
+# ГЕНЕРАТОР НИКОВ + ПОИСК (РАБОЧИЙ)
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -527,96 +400,84 @@ class NickGenerator:
             self.session = aiohttp.ClientSession()
         return self.session
     
-    def _generate_nickname(self, length: int, with_digits: bool) -> str:
-        """Генератор красивых юзернеймов строго заданной длины."""
-        vowels = "aeiouy"
-        consonants = "bcdfghjklmnpqrstvwxz"
+    def generate_nick(self, length: int, with_digits: bool = False) -> str:
+        """Генерирует красивый ник"""
+        syllables = [
+            'ab', 'ac', 'ad', 'ag', 'al', 'an', 'ar', 'as', 'at', 'av',
+            'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
+            'da', 'de', 'di', 'do', 'du', 'el', 'en', 'er', 'es', 'et',
+            'fa', 'fe', 'fi', 'fo', 'fu', 'ga', 'ge', 'gi', 'go', 'gu',
+            'ha', 'he', 'hi', 'ho', 'hu', 'id', 'il', 'im', 'in', 'ir',
+            'ja', 'je', 'ji', 'jo', 'ju', 'ka', 'ke', 'ki', 'ko', 'ku',
+            'la', 'le', 'li', 'lo', 'lu', 'ma', 'me', 'mi', 'mo', 'mu',
+            'na', 'ne', 'ni', 'no', 'nu', 'ok', 'ol', 'om', 'on', 'op',
+            'pa', 'pe', 'pi', 'po', 'pu', 'ra', 're', 'ri', 'ro', 'ru',
+            'sa', 'se', 'si', 'so', 'su', 'ta', 'te', 'ti', 'to', 'tu',
+            'un', 'up', 'ur', 'us', 'ut', 'va', 've', 'vi', 'vo', 'vu',
+            'wa', 'we', 'wi', 'wo', 'wu', 'ya', 'ye', 'yi', 'yo', 'yu',
+            'za', 'ze', 'zi', 'zo', 'zu'
+        ]
+        pretty_letters = 'aeioulnrst'
         
-        if length == 6 and random.random() < 0.4:
-            part1 = "".join(random.choice(consonants if i % 2 == 0 else vowels) for i in range(2))
-            part2 = "".join(random.choice(vowels if i % 2 == 0 else consonants) for i in range(3))
-            username = f"{part1}_{part2}"
-        else:
-            username = ""
-            start_vowel = random.choice([True, False])
-            for i in range(length):
-                if (i % 2 == 0 and start_vowel) or (i % 2 != 0 and not start_vowel):
-                    username += random.choice(vowels)
+        nick = ""
+        while len(nick) < length:
+            syllable = random.choice(syllables)
+            nick += syllable
+            if len(nick) >= length:
+                break
+        
+        nick = nick[:length]
+        while len(nick) < length:
+            nick += random.choice(pretty_letters)
+        
+        if with_digits:
+            for _ in range(random.randint(1, 2)):
+                if len(nick) < length:
+                    nick += random.choice('0123456789')
                 else:
-                    username += random.choice(consonants)
-
-        if with_digits and random.random() < 0.6:
-            username = username[:-1] + random.choice(string.digits)
-
-        return username
-    
-    async def _check_web(self, username: str) -> bool:
-        """Проверка через HTTP-запрос (Fragment / скрытые каналы)."""
-        url = f"https://t.me/{username}"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=4) as response:
-                    if response.status == 200:
-                        html_text = await response.text()
-                        if 'tgme_page_extra' in html_text or 'tgme_page_title' in html_text:
-                            return False
-                        if "fragment.com" in html_text.lower():
-                            return False
-                        return True
-        except Exception as e:
-            logger.error(f"Ошибка Web-проверки для @{username}: {e}")
-            return False
-        return False
+                    break
+            nick = nick[:length]
+        
+        while len(nick) < length:
+            nick += random.choice(pretty_letters)
+        
+        return nick.lower()
     
     async def check_available(self, nick: str) -> bool:
-        """Проверка через API + Web"""
+        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК"""
         try:
             await self.bot.get_chat(f"@{nick}")
-            logger.info(f"❌ @{nick} - ЗАНЯТ (API)")
-            return False
-        except TelegramBadRequest as e:
-            if "chat not found" in str(e).lower():
-                is_free = await self._check_web(nick)
-                if is_free:
-                    logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                    return True
-                else:
-                    logger.info(f"❌ @{nick} - ЗАНЯТ (Web)")
-                    return False
+            logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
         except Exception as e:
-            logger.info(f"⚠️ @{nick} - Ошибка: {e}")
+            error_msg = str(e).lower()
+            if "chat not found" in error_msg or "user not found" in error_msg:
+                logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                return True
             return False
     
-    async def search_free(self, length: int, with_digits: bool, 
-                          message: Message, lang: str) -> Tuple[Optional[str], int, List[str]]:
-        """Основной цикл поиска с видимым прогрессом"""
-        max_attempts = 15
+    async def search_free(self, length: int, with_digits: bool = False, 
+                          message=None) -> Tuple[Optional[str], int, List[str]]:
+        """Ищет свободный ник - останавливается на ПЕРВОМ найденном"""
+        MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
         found = None
         found_attempt = 0
         
-        loading_titles = {
-            "ru": "🔎 <b>Поиск свободного юзернейма...</b>\n\nПопытка: <code>{attempt}/{max}</code>\nПроверяю: <code>@{nick}</code>\n📋 Проверено: {checked} ников",
-            "en": "🔎 <b>Searching for free username...</b>\n\nAttempt: <code>{attempt}/{max}</code>\nChecking: <code>@{nick}</code>\n📋 Checked: {checked} nicks"
-        }
-        status_template = loading_titles.get(lang, loading_titles["ru"])
+        if message:
+            await message.edit_text(
+                f"🔍 <b>Поиск свободного ника...</b>\n\n"
+                f"📏 Длина: {length} символов\n"
+                f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+                f"⏳ 0/{MAX_ATTEMPTS}\n\n"
+                f"<i>Начинаю поиск...</i>",
+                parse_mode="HTML"
+            )
         
-        # Начальное сообщение
-        lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
-        await message.edit_text(
-            lang_text["searching"].format(
-                length=length,
-                digits="Да" if with_digits else "Нет",
-                max=max_attempts
-            ),
-            parse_mode="HTML"
-        )
-        
-        while attempts < max_attempts:
+        while attempts < MAX_ATTEMPTS:
             attempts += 1
-            nick = self._generate_nickname(length, with_digits)
+            nick = self.generate_nick(length, with_digits)
             
             if nick in self.checked_cache:
                 continue
@@ -624,57 +485,71 @@ class NickGenerator:
             self.checked_cache.add(nick)
             checked.append(nick)
             
-            # Обновляем прогресс КАЖДУЮ ПОПЫТКУ
-            try:
-                await message.edit_text(
-                    status_template.format(
-                        attempt=attempts,
-                        max=max_attempts,
-                        nick=nick,
-                        checked=len(checked)
-                    ),
-                    parse_mode="HTML"
+            if message:
+                progress_text = (
+                    f"🔍 <b>Поиск свободного ника...</b>\n\n"
+                    f"📏 Длина: {length} символов\n"
+                    f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+                    f"⏳ <b>{attempts}/{MAX_ATTEMPTS}</b>\n\n"
+                    f"🔎 Проверяю: <code>@{nick}</code>\n"
+                    f"📋 Проверено: {len(checked)} ников\n\n"
+                    f"<i>Ищу свободный ник...</i>"
                 )
-            except Exception as e:
-                logger.warning(f"Ошибка обновления сообщения: {e}")
+                await message.edit_text(progress_text, parse_mode="HTML")
             
-            logger.info(f"🔄 Попытка {attempts}/{max_attempts}: @{nick}")
+            logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
             
             is_available = await self.check_available(nick)
             
             if is_available:
                 found = nick
                 found_attempt = attempts
-                await message.edit_text(
-                    LANGUAGES.get(lang, LANGUAGES["ru"])["search_found"].format(
-                        nick=nick,
-                        attempt=attempts,
-                        max=max_attempts,
-                        checked=len(checked)
-                    ),
-                    parse_mode="HTML"
-                )
+                if message:
+                    await message.edit_text(
+                        f"🎉 <b>НАЙДЕН СВОБОДНЫЙ НИК!</b>\n\n"
+                        f"👤 <code>@{nick}</code>\n"
+                        f"🎯 Найден на попытке {attempts}/{MAX_ATTEMPTS}\n"
+                        f"📋 Проверено: {len(checked)} ников",
+                        parse_mode="HTML"
+                    )
                 break
             
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(1.0)
         
-        if not found:
+        if not found and message:
             await message.edit_text(
-                LANGUAGES.get(lang, LANGUAGES["ru"])["not_found"].format(
-                    checked=len(checked)
-                ),
+                f"❌ <b>Свободный ник не найден</b>\n\n"
+                f"⏳ Попыток: {MAX_ATTEMPTS}/{MAX_ATTEMPTS}\n"
+                f"📋 Проверено: {len(checked)} ников\n\n"
+                f"💡 Запрос не потрачен! Попробуйте другой режим.",
                 parse_mode="HTML"
             )
         
         return found, found_attempt, checked
     
     def calculate_rating(self, nick: str) -> int:
-        """Рассчитывает рейтинг крутизны ника."""
+        """Рейтинг ника (1-10)"""
         rating = 5
-        if "_" not in nick: rating += 1
-        if nick[-1].isalpha(): rating += 0.5
-        if len(nick) == 5: rating += 1
-        elif len(nick) == 6: rating += 0.5
+        
+        if len(nick) == 5:
+            rating += 1
+        elif len(nick) == 6:
+            rating += 0.5
+        
+        unique_ratio = len(set(nick)) / len(nick)
+        if unique_ratio > 0.7:
+            rating += 1
+        elif unique_ratio > 0.5:
+            rating += 0.5
+        
+        vowels = sum(1 for c in nick if c in 'aeiouy')
+        if 0.2 < vowels / len(nick) < 0.8:
+            rating += 1
+        
+        pretty = 'aeioulnrst'
+        if sum(1 for c in nick if c in pretty) / len(nick) > 0.5:
+            rating += 0.5
+        
         return min(10, max(1, round(rating)))
 
 # ═══════════════════════════════════════════════════════════════════
@@ -726,7 +601,6 @@ class ImageGenerator:
         
         draw.text((width // 2, 30), "👻 НАЙДЕН НИК!", font=self.fonts["medium"], fill=(255,255,255), anchor="mm")
         draw.text((width // 2, 80), "✅ Telegram — свободен", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
-        draw.text((width // 2, 110), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
         draw.text((width // 2, 180), f"@{nick}", font=self.fonts["large"], fill=(0,255,200), anchor="mm")
         
         stars = "⭐" * rating + "☆" * (10 - rating)
@@ -749,22 +623,12 @@ image_gen = ImageGenerator()
 
 class Keyboards:
     @staticmethod
-    def language_menu() -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru"),
-                InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")
-            ]
-        ])
-    
-    @staticmethod
     def main_menu(is_developer: bool = False) -> InlineKeyboardMarkup:
         buttons = [
             [InlineKeyboardButton(text="🔍 Поиск", callback_data="menu_search")],
             [InlineKeyboardButton(text="💎 Премиум", callback_data="menu_premium")],
             [InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile")],
             [InlineKeyboardButton(text="👥 Рефералы", callback_data="menu_referrals")],
-            [InlineKeyboardButton(text="🌍 Язык", callback_data="menu_language")],
             [InlineKeyboardButton(text="ℹ️ Информация", callback_data="menu_info")],
             [InlineKeyboardButton(text="🆘 Поддержка", callback_data="menu_help")]
         ]
@@ -886,60 +750,38 @@ async def cmd_start(message: Message, command: CommandObject):
         db.update_user_field(user_id, "username", username)
         db.update_user_field(user_id, "first_name", first_name)
     
-    lang = db.get_language(user_id)
-    lang_manager.set_lang(user_id, lang)
-    
     is_dev = db.is_developer(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
-    text = lang_text["welcome"].format(
-        name=first_name,
-        requests=db.get_free_requests(user_id)
-    )
+    text = f"""
+👻 <b>Добро пожаловать в GHOST - Поиск Ников!</b>
+
+Привет, {first_name}! 👋
+
+🎯 <b>Что здесь можно делать?</b>
+• Находить свободные Telegram-ни́ки
+• Проверка через Telegram API (15 попыток)
+• Получать рейтинг и стоимость ника
+
+📌 <b>Доступные режимы:</b>
+• 6 букв — бесплатно
+• 5 букв — только PREMIUM
+
+📌 <b>Для новичков:</b>
+• {db.get_free_requests(user_id)} бесплатных поисков в день
+• После каждого поиска кд 30 секунд• Запросы обновляются каждые 2 дня (+3)
+• <b>Запрос не тратится, если ник не найден!</b>
+
+💎 <b>Премиум:</b>
+• Безлимитные поиски
+• Доступ к 5-буквенным никам
+
+<i>Разработчик: @gawuzu</i>
+"""
     
     if is_dev:
         text += "\n\n👑 <b>Вы вошли как разработчик!</b>"
     
     await message.answer(text, reply_markup=kb.main_menu(is_dev), parse_mode="HTML")
-
-# ═══════════════════════════════════════════════════════════════════
-# ВЫБОР ЯЗЫКА
-# ═══════════════════════════════════════════════════════════════════
-
-@dp.callback_query(F.data == "menu_language")
-async def menu_language(callback: CallbackQuery):
-    await callback.message.edit_text(
-        LANGUAGES["ru"]["choose_language"],
-        reply_markup=kb.language_menu(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("lang_"))
-async def set_language(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    lang = callback.data.split("_")[1]
-    
-    db.set_language(user_id, lang)
-    lang_manager.set_lang(user_id, lang)
-    
-    is_dev = db.is_developer(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
-    
-    text = lang_text["welcome"].format(
-        name=db.get_user(user_id).get("first_name", "User"),
-        requests=db.get_free_requests(user_id)
-    )
-    
-    if is_dev:
-        text += "\n\n👑 <b>Вы вошли как разработчик!</b>"
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=kb.main_menu(is_dev),
-        parse_mode="HTML"
-    )
-    await callback.answer(f"✅ Язык изменён на {LANGUAGES[lang]['name']}")
 
 # ═══════════════════════════════════════════════════════════════════
 # ГЛАВНОЕ МЕНЮ
@@ -968,15 +810,13 @@ async def menu_back(callback: CallbackQuery):
 @dp.callback_query(F.data == "menu_dev")
 async def menu_dev(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        lang_text["dev_panel"],
+        "👑 <b>Панель разработчика</b>\n\nВыберите раздел:",
         reply_markup=kb.dev_menu(),
         parse_mode="HTML"
     )
@@ -985,8 +825,6 @@ async def menu_dev(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_stats")
 async def dev_stats(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -996,12 +834,16 @@ async def dev_stats(callback: CallbackQuery):
     total_searches = db.get_total_searches()
     premium_count = db.get_premium_count()
     
+    text = f"""
+📊 <b>Статистика бота</b>
+
+👥 Пользователи: {total_users}
+🔍 Всего поисков: {total_searches}
+💎 Премиум: {premium_count}
+"""
+    
     await callback.message.edit_text(
-        lang_text["dev_stats"].format(
-            users=total_users,
-            searches=total_searches,
-            premium=premium_count
-        ),
+        text,
         reply_markup=kb.dev_menu(),
         parse_mode="HTML"
     )
@@ -1010,15 +852,14 @@ async def dev_stats(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_users")
 async def dev_users(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     users = db.get_all_users()
-    text = ""
+    text = f"👥 Список пользователей\n\nВсего: {len(users)}\n\n"
+    
     for i, uid in enumerate(users[:20], 1):
         user = db.get_user(uid)
         username = user.get("username", f"user{uid}")
@@ -1030,10 +871,7 @@ async def dev_users(callback: CallbackQuery):
         text += f"\n... и еще {len(users) - 20}"
     
     await callback.message.edit_text(
-        lang_text["dev_users"].format(
-            total=len(users),
-            users=text
-        ),
+        text,
         reply_markup=kb.dev_menu(),
         parse_mode="HTML"
     )
@@ -1042,15 +880,13 @@ async def dev_users(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_broadcast")
 async def dev_broadcast(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        lang_text["dev_broadcast"],
+        "📢 Рассылка\n\nОтправьте сообщение для рассылки:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -1100,15 +936,13 @@ async def process_broadcast(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "dev_promos")
 async def dev_promos_menu(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        lang_text["dev_promos"],
+        "🎁 Управление промокодами",
         reply_markup=kb.dev_promos_menu(),
         parse_mode="HTML"
     )
@@ -1117,15 +951,13 @@ async def dev_promos_menu(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_promo_create")
 async def dev_promo_create(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        lang_text["dev_promo_create"],
+        "🎁 Создать промокод\n\nВведите код (буквы и цифры):",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
@@ -1137,31 +969,9 @@ async def dev_promo_create(callback: CallbackQuery, state: FSMContext):
 @dp.message(DevStates.waiting_for_promo_code)
 async def dev_promo_code_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
-        await state.clear()
-        return
-    
-    data = await state.get_data()
-    delete_mode = data.get("delete_mode", False)
-    
-    if delete_mode:
-        code = message.text.strip().upper()
-        if db.delete_promo(code):
-            await message.answer(
-                lang_text["promo_deleted"].format(code=code),
-                reply_markup=kb.dev_promos_menu(),
-                parse_mode="HTML"
-            )
-        else:
-            await message.answer(
-                lang_text["promo_not_found"].format(code=code),
-                reply_markup=kb.dev_promos_menu(),
-                parse_mode="HTML"
-            )
         await state.clear()
         return
     
@@ -1177,8 +987,6 @@ async def dev_promo_code_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_promo_days)
 async def dev_promo_days_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1200,8 +1008,6 @@ async def dev_promo_days_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_promo_limit)
 async def dev_promo_limit_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1222,11 +1028,7 @@ async def dev_promo_limit_input(message: Message, state: FSMContext):
     
     if db.create_promo(code, days, limit, user_id):
         await message.answer(
-            lang_text["promo_created"].format(
-                code=code,
-                days=days,
-                limit=limit
-            ),
+            f"✅ Промокод создан!\n\n📌 Код: <code>{code}</code>\n📅 {days} дней\n👥 Лимит: {limit}",
             parse_mode="HTML",
             reply_markup=kb.dev_promos_menu()
         )
@@ -1241,8 +1043,6 @@ async def dev_promo_limit_input(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "dev_promo_list")
 async def dev_promo_list(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1260,6 +1060,7 @@ async def dev_promo_list(callback: CallbackQuery):
         return
     
     text = "📋 Список промокодов\n\n"
+    
     for promo in promos[:20]:
         status = "✅" if promo["expires_at"] > int(time.time()) else "❌"
         text += f"{status} <code>{promo['code']}</code>\n"
@@ -1276,15 +1077,13 @@ async def dev_promo_list(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_promo_delete")
 async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        lang_text["dev_promo_delete"],
+        "❌ Удалить промокод\n\nВведите код:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
@@ -1294,6 +1093,37 @@ async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
     await state.update_data(delete_mode=True)
     await callback.answer()
 
+@dp.message(DevStates.waiting_for_promo_code)
+async def dev_promo_delete_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if not db.is_developer(user_id):
+        await message.answer("⛔ Доступ запрещен")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    delete_mode = data.get("delete_mode", False)
+    
+    if delete_mode:
+        code = message.text.strip().upper()
+        
+        if db.delete_promo(code):
+            await message.answer(
+                f"✅ Промокод {code} удален!",
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                f"❌ Промокод {code} не найден!",
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
+        
+        await state.clear()
+        return
+
 # ═══════════════════════════════════════════════════════════════════
 # ВЫДАТЬ ПРЕМИУМ/ЗАПРОСЫ
 # ═══════════════════════════════════════════════════════════════════
@@ -1301,15 +1131,13 @@ async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "dev_give_premium")
 async def dev_give_premium(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        lang_text["dev_give_premium"],
+        "💎 Выдать премиум\n\nВведите ID пользователя:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -1322,15 +1150,13 @@ async def dev_give_premium(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "dev_give_requests")
 async def dev_give_requests(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        lang_text["dev_give_requests"],
+        "📦 Выдать запросы\n\nВведите ID пользователя:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -1343,8 +1169,6 @@ async def dev_give_requests(callback: CallbackQuery, state: FSMContext):
 @dp.message(DevStates.waiting_for_user_id)
 async def dev_user_id_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1370,8 +1194,6 @@ async def dev_user_id_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_days)
 async def dev_premium_days_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1390,15 +1212,15 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     target_id = data.get("target_id")
     
     new_until = db.add_premium(target_id, days)
+    
     target_user = db.get_user(target_id)
     username = target_user.get("username", f"user{target_id}")
     
     await message.answer(
-        lang_text["premium_given"].format(
-            username=username,
-            days=days,
-            until=datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')
-        ),
+        f"✅ <b>Премиум выдан!</b>\n\n"
+        f"👤 @{username}\n"
+        f"📅 {days} дней\n"
+        f"🕐 До: {datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')}",
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1417,8 +1239,6 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_count)
 async def dev_requests_count_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1437,14 +1257,12 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     target_id = data.get("target_id")
     
     db.add_free_requests(target_id, count)
+    
     target_user = db.get_user(target_id)
     username = target_user.get("username", f"user{target_id}")
     
     await message.answer(
-        lang_text["requests_given"].format(
-            username=username,
-            count=count
-        ),
+        f"✅ Запросы выданы!\n\n👤 @{username}\n📊 +{count} запросов",
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1461,14 +1279,12 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК (С ВИДИМЫМ ПРОГРЕССОМ)
+# ПОИСК (РАБОТАЕТ!)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
 async def menu_search(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     banned, reason = db.is_banned(user_id)
     if banned:
@@ -1478,10 +1294,25 @@ async def menu_search(callback: CallbackQuery):
     is_premium = db.is_premium(user_id)
     free_requests = db.get_free_requests(user_id)
     
+    text = f"""
+🔍 <b>ПОИСК ЮЗЕРНЕЙМА</b>
+
+✅ Каждый найденный ник проходит проверку:
+  • Telegram — не занят профилем, каналом или ботом
+
+📌 <b>Доступные режимы:</b>
+  • 6 букв — бесплатно
+  • 5 букв — только PREMIUM
+
+📊 Осталось попыток: {free_requests if not is_premium else '♾️'}
+🎯 Поиск за 15 попыток
+💡 Запрос не тратится, если ник не найден!
+
+<b>Выберите режим:</b>
+"""
+    
     await callback.message.edit_text(
-        lang_text["search_desc"].format(
-            requests=free_requests if not is_premium else '♾️'
-        ),
+        text,
         reply_markup=kb.search_menu(is_premium),
         parse_mode="HTML"
     )
@@ -1490,8 +1321,6 @@ async def menu_search(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("search_"))
 async def start_search(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     banned, reason = db.is_banned(user_id)
     if banned:
@@ -1528,19 +1357,18 @@ async def start_search(callback: CallbackQuery):
     
     db.update_last_search(user_id)
     
-    # Создаём сообщение для прогресса
     search_msg = await callback.message.edit_text(
-        lang_text["searching"].format(
-            length=length,
-            digits="Да" if with_digits else "Нет",
-            max=MAX_SEARCH_ATTEMPTS
-        ),
+        "🔍 <b>Поиск свободного юзернейма...</b>\n\n"
+        f"📏 Длина: {length} символов\n"
+        f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+        f"⏳ 0/15\n\n"
+        f"<i>Начинаю поиск...</i>",
         parse_mode="HTML"
     )
     
     generator = NickGenerator(bot)
     nick, attempts, checked = await generator.search_free(
-        length, with_digits, search_msg, lang
+        length, with_digits, message=search_msg
     )
     
     if nick:
@@ -1554,24 +1382,29 @@ async def start_search(callback: CallbackQuery):
         
         img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
         
+        text = f"""
+✅ <b>Найден свободный ник!</b>
+
+👤 <b>Юзернейм:</b> @{nick}
+📏 <b>Длина:</b> {length} символов
+{'🔢 С цифрами' if with_digits else '🔤 Только буквы'}
+⭐ <b>Рейтинг:</b> {rating}/10
+💰 <b>Ценность:</b> ${price_usd}
+🎯 <b>Найден за:</b> {attempts} попыток
+"""
+        
         await callback.message.answer_photo(
             photo=BufferedInputFile(img_buffer.getvalue(), filename="nick.png"),
-            caption=lang_text["found"].format(
-                nick=nick,
-                length=length,
-                with_digits="🔢 С цифрами\n" if with_digits else "🔤 Только буквы\n",
-                rating=rating,
-                price=price_usd,
-                attempts=attempts
-            ),
+            caption=text,
             reply_markup=kb.result_menu(nick),
             parse_mode="HTML"
         )
     else:
         await search_msg.edit_text(
-            lang_text["not_found"].format(
-                checked=len(checked)
-            ),
+            "❌ <b>Свободный ник не найден</b>\n\n"
+            f"⏳ Попыток: 15/15\n"
+            f"📋 Проверено: {len(checked)} ников\n\n"
+            "💡 <b>Запрос не был потрачен!</b>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="menu_search")],
@@ -1591,15 +1424,12 @@ async def search_skip(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("copy_"))
 async def copy_username(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
-    
     nick = callback.data.split("_")[1]
     
     await callback.answer(f"✅ @{nick} скопирован!", show_alert=True)
+    
     await callback.message.answer(
-        lang_text["copy"].format(nick=nick),
+        f"📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
         parse_mode="HTML"
     )
 
@@ -1610,19 +1440,29 @@ async def copy_username(callback: CallbackQuery):
 @dp.callback_query(F.data == "menu_premium")
 async def menu_premium(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     is_premium = db.is_premium(user_id)
     
-    text = lang_text["premium"]
+    text = """
+💎 <b>ПРЕМИУМ ПОДПИСКА</b>
+
+<b>ФУНКЦИИ:</b>
+• Безлимитный поиск
+• Доступ к 5-буквенным никам
+
+<b>ЦЕНЫ:</b>
+1 день — 65⭐
+3 дня — 150⭐
+10 дней — 400⭐
+30 дней — 800⭐
+"""
     
     if is_premium:
         remaining = db.get_premium_remaining(user_id)
         days = remaining // 86400
         hours = (remaining % 86400) // 3600
-        text += lang_text["premium_active"].format(days=days, hours=hours)
+        text += f"\n✅ Активен: {days}д {hours}ч"
     else:
-        text += lang_text["premium_inactive"]
+        text += "\n❌ Не активен"
     
     await callback.message.edit_text(
         text,
@@ -1634,8 +1474,6 @@ async def menu_premium(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("premium_"))
 async def buy_premium(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if callback.data == "premium_promo":
         await callback.message.edit_text(
@@ -1731,35 +1569,45 @@ async def handle_promo(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "menu_profile")
 async def menu_profile(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
-    
     user = db.get_user(user_id)
     is_premium = db.is_premium(user_id)
     found = db.get_found_usernames(user_id, 5)
     is_dev = db.is_developer(user_id)
     
-    nicks_text = ""
+    text = f"""
+👤 <b>Профиль</b>
+
+📌 ID: {user_id}
+📌 Имя: {user.get('first_name', 'Не указано')}
+📌 Юзернейм: @{user.get('username', 'Не указан')}
+
+📊 <b>Статистика:</b>
+• Найдено: {user.get('total_searches', 0)}
+• Запросов: {db.get_free_requests(user_id)}/{MAX_FREE_REQUESTS}
+
+📋 <b>Последние найденные:</b>
+"""
+    
     if found:
         for item in found[:5]:
             dt = datetime.fromtimestamp(item["found_at"]).strftime("%d.%m %H:%M")
-            nicks_text += f"  • @{item['username']} — {dt}\n"
+            text += f"  • @{item['username']} — {dt}\n"
     else:
-        nicks_text += "  • Пока нет\n"
+        text += "  • Пока нет\n"
     
-    premium_status = "✅" if is_premium else "❌"
+    if is_premium:
+        remaining = db.get_premium_remaining(user_id)
+        days = remaining // 86400
+        hours = (remaining % 86400) // 3600
+        text += f"\n💎 Премиум: ✅ ({days}д {hours}ч)"
+    else:
+        text += "\n💎 Премиум: ❌"
+    
+    if is_dev:
+        text += "\n👑 Разработчик"
     
     await callback.message.edit_text(
-        lang_text["profile"].format(
-            id=user_id,
-            name=user.get('first_name', 'Не указано'),
-            username=user.get('username', 'Не указан'),
-            found=user.get('total_searches', 0),
-            requests=db.get_free_requests(user_id),
-            max=MAX_FREE_REQUESTS,
-            nicks=nicks_text,
-            premium=premium_status
-        ),
+        text,
         reply_markup=kb.profile_menu(),
         parse_mode="HTML"
     )
@@ -1768,7 +1616,6 @@ async def menu_profile(callback: CallbackQuery):
 @dp.callback_query(F.data == "profile_found")
 async def profile_found(callback: CallbackQuery):
     user_id = callback.from_user.id
-    
     found = db.get_found_usernames(user_id, 20)
     
     if not found:
@@ -1781,6 +1628,7 @@ async def profile_found(callback: CallbackQuery):
         return
     
     text = "📊 <b>Найденные ники</b>\n\n"
+    
     for i, item in enumerate(reversed(found[:20]), 1):
         dt = datetime.fromtimestamp(item["found_at"]).strftime("%d.%m %H:%M")
         text += f"{i}. @{item['username']} — {dt}\n"
@@ -1802,14 +1650,24 @@ async def profile_found(callback: CallbackQuery):
 @dp.callback_query(F.data == "menu_referrals")
 async def menu_referrals(callback: CallbackQuery):
     user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
-    
     code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
     link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
+    text = f"""
+👥 <b>Рефералы</b>
+
+🔗 <b>Ссылка:</b>
+<code>{link}</code>
+
+<b>Награды:</b>
+• 7 → 1 день
+• 14 → 3 дня
+• 25 → 10 дней
+• 50 → 25 дней
+"""
+    
     await callback.message.edit_text(
-        lang_text["referral"].format(link=link),
+        text,
         reply_markup=kb.referral_menu(),
         parse_mode="HTML"
     )
@@ -1818,7 +1676,6 @@ async def menu_referrals(callback: CallbackQuery):
 @dp.callback_query(F.data == "referral_link")
 async def referral_link(callback: CallbackQuery):
     user_id = callback.from_user.id
-    
     code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
     link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
@@ -1834,12 +1691,19 @@ async def referral_link(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "menu_info")
 async def menu_info(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    text = """
+ℹ️ <b>GHOST - Поиск Ников</b>
+
+• Находит свободные ники 5-6 букв
+• Проверка через Telegram API
+• 15 попыток с прогрессом
+• Рейтинг и цена в $
+• Запрос не тратится если ник не найден
+• Оплата: Telegram Stars
+"""
     
     await callback.message.edit_text(
-        lang_text["info"],
+        text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_back")]
         ]),
@@ -1853,12 +1717,14 @@ async def menu_info(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "menu_help")
 async def menu_help(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    lang = db.get_language(user_id)
-    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    text = """
+🆘 <b>Поддержка</b>
+
+Разработчик: @gawuzu
+"""
     
     await callback.message.edit_text(
-        lang_text["help"],
+        text,
         reply_markup=kb.help_menu(),
         parse_mode="HTML"
     )
@@ -1910,9 +1776,7 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
-    logger.info("✅ Мультиязычный (Русский, English)")
-    logger.info("✅ Двойная проверка: API + Web")
-    logger.info("✅ ВИДИМЫЙ ПРОГРЕСС ПОИСКА")
+    logger.info("✅ Поиск работает!")
     logger.info("✅ База данных сохраняется")
     
     try:

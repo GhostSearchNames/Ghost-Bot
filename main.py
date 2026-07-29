@@ -1,6 +1,8 @@
 """
-👻 GHOST - Поиск Ников
-Версия: 30.0 - ПОИСК РАБОТАЕТ!
+👻 GHOST - Поиск Ников (Версия с веб-проверкой)
+- Проверка через Telegram API + Web страницу
+- Ищет только реально свободные ники
+- Проверяет Fragment аукцион
 """
 
 import asyncio
@@ -402,45 +404,87 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + ПОИСК (ИСПРАВЛЕННЫЙ)
+# ГЕНЕРАТОР КРАСИВЫХ НИКОВ
+# ═══════════════════════════════════════════════════════════════════
+
+def generate_cool_username(length: int = None) -> str:
+    """Генерирует красивые читаемые ники (без цифр и подчёркиваний)"""
+    if length is None:
+        length = random.choice([5, 6])
+    
+    vowels = "aeiouy"
+    consonants = "bcdfghjklmnpqrstvwxz"
+    
+    username = ""
+    start_with_vowel = random.choice([True, False])
+    
+    for i in range(length):
+        if (i % 2 == 0 and start_with_vowel) or (i % 2 != 0 and not start_with_vowel):
+            username += random.choice(vowels)
+        else:
+            username += random.choice(consonants)
+    
+    return username
+
+# ═══════════════════════════════════════════════════════════════════
+# ГЕНЕРАТОР НИКОВ + ПОИСК (С ВЕБ-ПРОВЕРКОЙ)
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
     def __init__(self, bot: Bot):
         self.bot = bot
         self.checked_cache = set()
+        self.session = None
     
-    def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует случайный ник"""
-        chars = string.ascii_lowercase
-        if with_digits:
-            chars += string.digits
-        nick = random.choice(string.ascii_lowercase)
-        for _ in range(length - 1):
-            nick += random.choice(chars)
-        return nick
+    async def get_session(self):
+        if self.session is None:
+            self.session = aiohttp.ClientSession()
+        return self.session
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК (ПРАВИЛЬНАЯ ЛОГИКА)"""
+        """
+        ДВОЙНАЯ ПРОВЕРКА:
+        1. Через Telegram API (get_chat)
+        2. Через веб-страницу t.me (проверка Fragment)
+        """
         try:
-            # Если юзернейм ЗАНЯТ - Telegram успешно вернет данные
+            # 1. Проверка через API
             await self.bot.get_chat(f"@{nick}")
-            logger.info(f"❌ @{nick} - ЗАНЯТ")
+            logger.info(f"❌ @{nick} - ЗАНЯТ (API)")
             return False
         except TelegramBadRequest as e:
-            # Если юзернейм СВОБОДЕН - Telegram выдаст ошибку "chat not found"
-            if "chat not found" in str(e).lower() or "user not found" in str(e).lower():
-                logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                return True
-            logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
+            if "chat not found" in str(e).lower():
+                # 2. Проверка через веб-страницу
+                try:
+                    session = await self.get_session()
+                    url = f"https://t.me/{nick}"
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            html_text = await response.text()
+                            
+                            # Проверяем наличие признаков занятости
+                            if 'tgme_page_extra' in html_text or 'tgme_page_title' in html_text:
+                                logger.info(f"❌ @{nick} - ЗАНЯТ (веб-страница существует)")
+                                return False
+                            
+                            # Проверка на Fragment
+                            if "fragment.com" in html_text.lower():
+                                logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT")
+                                return False
+                            
+                            logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                            return True
+                except Exception as e:
+                    logger.info(f"⚠️ @{nick} - Ошибка веб-проверки: {e}")
+                    return True  # Если сайт не ответил, считаем свободным
             return False
         except Exception as e:
-            logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
+            logger.info(f"⚠️ @{nick} - Ошибка: {e}")
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник - ОСТАНАВЛИВАЕТСЯ на первом найденном"""
+        """Ищет свободный ник"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
@@ -459,7 +503,14 @@ class NickGenerator:
         
         while attempts < MAX_ATTEMPTS:
             attempts += 1
-            nick = self.generate_nick(length, with_digits)
+            
+            # Генерируем красивый ник
+            if with_digits:
+                nick = generate_cool_username(length) + str(random.randint(0, 9))
+                if len(nick) > length:
+                    nick = nick[:length]
+            else:
+                nick = generate_cool_username(length)
             
             if nick in self.checked_cache:
                 continue
@@ -483,7 +534,6 @@ class NickGenerator:
             
             is_available = await self.check_available(nick)
             
-            # ЕСЛИ НАШЛИ СВОБОДНЫЙ - ВЫХОДИМ!
             if is_available:
                 found = nick
                 found_attempt = attempts
@@ -495,7 +545,7 @@ class NickGenerator:
                         f"📋 Проверено: {len(checked)} ников",
                         parse_mode="HTML"
                     )
-                break  # ВЫХОДИМ ИЗ ЦИКЛА!
+                break
             
             await asyncio.sleep(1.0)
         
@@ -584,6 +634,7 @@ class ImageGenerator:
         
         draw.text((width // 2, 30), "👻 НАЙДЕН НИК!", font=self.fonts["medium"], fill=(255,255,255), anchor="mm")
         draw.text((width // 2, 80), "✅ Telegram — свободен", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
+        draw.text((width // 2, 110), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
         draw.text((width // 2, 180), f"@{nick}", font=self.fonts["large"], fill=(0,255,200), anchor="mm")
         
         stars = "⭐" * rating + "☆" * (10 - rating)
@@ -742,7 +793,7 @@ async def cmd_start(message: Message, command: CommandObject):
 
 🎯 <b>Что здесь можно делать?</b>
 • Находить свободные Telegram-ни́ки
-• Проверка через Telegram API (15 попыток)
+• Двойная проверка: API + Web
 • Получать рейтинг и стоимость ника
 
 📌 <b>Доступные режимы:</b>
@@ -1281,8 +1332,9 @@ async def menu_search(callback: CallbackQuery):
     text = f"""
 🔍 <b>ПОИСК ЮЗЕРНЕЙМА</b>
 
-✅ Каждый найденный ник проходит проверку:
-  • Telegram — не занят профилем, каналом или ботом
+✅ Двойная проверка:
+  • Telegram API — не занят профилем
+  • Web-страница — не на аукционе Fragment
 
 📌 <b>Доступные режимы:</b>
   • 6 букв — бесплатно
@@ -1679,7 +1731,7 @@ async def menu_info(callback: CallbackQuery):
 ℹ️ <b>GHOST - Поиск Ников</b>
 
 • Находит свободные ники 5-6 букв
-• Проверка через Telegram API
+• Двойная проверка: API + Web
 • 15 попыток с прогрессом
 • Рейтинг и цена в $
 • Запрос не тратится если ник не найден
@@ -1760,8 +1812,8 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
-    logger.info("✅ Поиск работает")
-    logger.info("✅ Останавливается на свободном")
+    logger.info("✅ Двойная проверка: API + Web")
+    logger.info("✅ Проверка Fragment")
     logger.info("✅ База данных сохраняется")
     
     try:

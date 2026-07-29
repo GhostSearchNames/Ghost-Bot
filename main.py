@@ -1,10 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 28.0 - ПОЛНОСТЬЮ РАБОЧАЯ
-- БЫСТРЫЙ ПОИСК (0.5 сек)
-- ПРОВЕРКА FRAGMENT
-- ПРЕМИУМ СОХРАНЯЕТСЯ
-- БАЗА ДАННЫХ НЕ ТЕРЯЕТСЯ
+Версия: 29.0 - РАБОЧАЯ
 """
 
 import asyncio
@@ -31,7 +27,6 @@ from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.exceptions import TelegramBadRequest
 import aiohttp
 from aiohttp import web
 
@@ -78,7 +73,7 @@ class DevStates(StatesGroup):
     waiting_for_broadcast = State()
 
 # ═══════════════════════════════════════════════════════════════════
-# БАЗА ДАННЫХ (SQLite С АВТОСОХРАНЕНИЕМ)
+# БАЗА ДАННЫХ (SQLite)
 # ═══════════════════════════════════════════════════════════════════
 
 class Database:
@@ -120,7 +115,7 @@ class Database:
                 backup_path = os.path.join(BACKUP_DIR, backup_name)
                 shutil.copy2(DB_FILE, backup_path)
                 backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.db')])
-                for old_backup in backups[:-10]:
+                for old_backup in backups[:-5]:
                     os.remove(os.path.join(BACKUP_DIR, old_backup))
                 logger.info(f"✅ Создан бекап: {backup_name}")
         except Exception as e:
@@ -246,7 +241,9 @@ class Database:
         else:
             new_until = int(time.time()) + (days * 86400)
         self.update_user_field(user_id, "premium_until", new_until)
-        logger.info(f"✅ Премиум сохранён: {user_id} -> {days} дней (до {datetime.fromtimestamp(new_until)})")
+        self.conn.commit()
+        self.backup_db()
+        logger.info(f"✅ Премиум сохранён: {user_id} -> {days} дней")
         return new_until
     
     def get_free_requests(self, user_id: int) -> int:
@@ -404,26 +401,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРОВЕРКА НА АУКЦИОНЕ (Fragment)
-# ═══════════════════════════════════════════════════════════════════
-
-async def check_fragment_auction(username: str) -> bool:
-    """Проверяет, выставлен ли ник на аукционе Fragment"""
-    try:
-        url = f"https://fragment.com/username/{username}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    if "Auction" in html or "Bid" in html or "auction" in html:
-                        return True
-                return False
-    except Exception as e:
-        logger.error(f"Ошибка проверки Fragment: {e}")
-        return False
-
-# ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + БЫСТРЫЙ ПОИСК (0.5 сек)
+# ГЕНЕРАТОР НИКОВ + ПОИСК (РАБОЧИЙ)
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -432,50 +410,17 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует красивый ник"""
-        syllables = [
-            'ab', 'ac', 'ad', 'ag', 'al', 'an', 'ar', 'as', 'at', 'av',
-            'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
-            'da', 'de', 'di', 'do', 'du', 'el', 'en', 'er', 'es', 'et',
-            'fa', 'fe', 'fi', 'fo', 'fu', 'ga', 'ge', 'gi', 'go', 'gu',
-            'ha', 'he', 'hi', 'ho', 'hu', 'id', 'il', 'im', 'in', 'ir',
-            'ja', 'je', 'ji', 'jo', 'ju', 'ka', 'ke', 'ki', 'ko', 'ku',
-            'la', 'le', 'li', 'lo', 'lu', 'ma', 'me', 'mi', 'mo', 'mu',
-            'na', 'ne', 'ni', 'no', 'nu', 'ok', 'ol', 'om', 'on', 'op',
-            'pa', 'pe', 'pi', 'po', 'pu', 'ra', 're', 'ri', 'ro', 'ru',
-            'sa', 'se', 'si', 'so', 'su', 'ta', 'te', 'ti', 'to', 'tu',
-            'un', 'up', 'ur', 'us', 'ut', 'va', 've', 'vi', 'vo', 'vu',
-            'wa', 'we', 'wi', 'wo', 'wu', 'ya', 'ye', 'yi', 'yo', 'yu',
-            'za', 'ze', 'zi', 'zo', 'zu'
-        ]
-        pretty_letters = 'aeioulnrst'
-        
-        nick = ""
-        while len(nick) < length:
-            syllable = random.choice(syllables)
-            nick += syllable
-            if len(nick) >= length:
-                break
-        
-        nick = nick[:length]
-        while len(nick) < length:
-            nick += random.choice(pretty_letters)
-        
+        """Генерирует случайный ник"""
+        chars = string.ascii_lowercase
         if with_digits:
-            for _ in range(random.randint(1, 2)):
-                if len(nick) < length:
-                    nick += random.choice('0123456789')
-                else:
-                    break
-            nick = nick[:length]
-        
-        while len(nick) < length:
-            nick += random.choice(pretty_letters)
-        
-        return nick.lower()
+            chars += string.digits
+        nick = random.choice(string.ascii_lowercase)
+        for _ in range(length - 1):
+            nick += random.choice(chars)
+        return nick
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ: Telegram + Fragment (аукцион)"""
+        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК"""
         try:
             await self.bot.get_chat(f"@{nick}")
             logger.info(f"❌ @{nick} - ЗАНЯТ")
@@ -483,19 +428,13 @@ class NickGenerator:
         except Exception as e:
             error_msg = str(e).lower()
             if "chat not found" in error_msg or "user not found" in error_msg:
-                # Проверяем аукцион
-                on_auction = await check_fragment_auction(nick)
-                if on_auction:
-                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ!")
-                    return False
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
-            logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """БЫСТРЫЙ ПОИСК: останавливается на ПЕРВОМ найденном (0.5 сек)"""
+        """Ищет свободный ник"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
@@ -551,8 +490,7 @@ class NickGenerator:
                     )
                 break
             
-            # ⚡ БЫСТРАЯ ЗАДЕРЖКА 0.5 СЕКУНДЫ
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(1.0)
         
         if not found and message:
             await message.edit_text(
@@ -639,7 +577,6 @@ class ImageGenerator:
         
         draw.text((width // 2, 30), "👻 НАЙДЕН НИК!", font=self.fonts["medium"], fill=(255,255,255), anchor="mm")
         draw.text((width // 2, 80), "✅ Telegram — свободен", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
-        draw.text((width // 2, 110), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
         draw.text((width // 2, 180), f"@{nick}", font=self.fonts["large"], fill=(0,255,200), anchor="mm")
         
         stars = "⭐" * rating + "☆" * (10 - rating)
@@ -1165,7 +1102,7 @@ async def dev_promo_delete_input(message: Message, state: FSMContext):
         return
 
 # ═══════════════════════════════════════════════════════════════════
-# ВЫДАТЬ ПРЕМИУМ (С СОХРАНЕНИЕМ)
+# ВЫДАТЬ ПРЕМИУМ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "dev_give_premium")
@@ -1251,7 +1188,6 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     data = await state.get_data()
     target_id = data.get("target_id")
     
-    # СОХРАНЯЕМ ПРЕМИУМ
     new_until = db.add_premium(target_id, days)
     
     target_user = db.get_user(target_id)
@@ -1261,8 +1197,7 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
         f"✅ <b>Премиум выдан и сохранён!</b>\n\n"
         f"👤 @{username}\n"
         f"📅 {days} дней\n"
-        f"🕐 До: {datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')}\n"
-        f"✅ Статус: активен",
+        f"🕐 До: {datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')}",
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1270,9 +1205,7 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     try:
         await bot.send_message(
             target_id,
-            f"🎉 <b>Вам выдан премиум!</b>\n\n"
-            f"📅 {days} дней\n"
-            f"💎 Теперь доступны все функции!",
+            f"🎉 <b>Вам выдан премиум!</b>\n\n📅 {days} дней\n💎 Доступны все функции!",
             parse_mode="HTML"
         )
     except:
@@ -1343,7 +1276,6 @@ async def menu_search(callback: CallbackQuery):
 
 ✅ Каждый найденный ник проходит проверку:
   • Telegram — не занят профилем, каналом или ботом
-  • Fragment — не выставлен на аукцион
 
 📌 <b>Доступные режимы:</b>
   • 6 букв — бесплатно
@@ -1821,8 +1753,7 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
-    logger.info("✅ БЫСТРЫЙ поиск (0.5 сек)")
-    logger.info("✅ Проверка Fragment (аукцион)")
+    logger.info("✅ Поиск работает")
     logger.info("✅ Премиум сохраняется")
     logger.info("✅ База данных сохраняется")
     

@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 29.0 - РАБОЧАЯ
+Версия: 30.0 - ПОИСК РАБОТАЕТ!
 """
 
 import asyncio
@@ -27,6 +27,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramBadRequest
 import aiohttp
 from aiohttp import web
 
@@ -401,7 +402,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + ПОИСК (РАБОЧИЙ)
+# ГЕНЕРАТОР НИКОВ + ПОИСК (ИСПРАВЛЕННЫЙ)
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -420,21 +421,26 @@ class NickGenerator:
         return nick
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК"""
+        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК (ПРАВИЛЬНАЯ ЛОГИКА)"""
         try:
+            # Если юзернейм ЗАНЯТ - Telegram успешно вернет данные
             await self.bot.get_chat(f"@{nick}")
             logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "chat not found" in error_msg or "user not found" in error_msg:
+        except TelegramBadRequest as e:
+            # Если юзернейм СВОБОДЕН - Telegram выдаст ошибку "chat not found"
+            if "chat not found" in str(e).lower() or "user not found" in str(e).lower():
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
+            logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
+            return False
+        except Exception as e:
+            logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник"""
+        """Ищет свободный ник - ОСТАНАВЛИВАЕТСЯ на первом найденном"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
@@ -477,6 +483,7 @@ class NickGenerator:
             
             is_available = await self.check_available(nick)
             
+            # ЕСЛИ НАШЛИ СВОБОДНЫЙ - ВЫХОДИМ!
             if is_available:
                 found = nick
                 found_attempt = attempts
@@ -488,7 +495,7 @@ class NickGenerator:
                         f"📋 Проверено: {len(checked)} ников",
                         parse_mode="HTML"
                     )
-                break
+                break  # ВЫХОДИМ ИЗ ЦИКЛА!
             
             await asyncio.sleep(1.0)
         
@@ -1102,7 +1109,7 @@ async def dev_promo_delete_input(message: Message, state: FSMContext):
         return
 
 # ═══════════════════════════════════════════════════════════════════
-# ВЫДАТЬ ПРЕМИУМ
+# ВЫДАТЬ ПРЕМИУМ/ЗАПРОСЫ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "dev_give_premium")
@@ -1194,7 +1201,7 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     username = target_user.get("username", f"user{target_id}")
     
     await message.answer(
-        f"✅ <b>Премиум выдан и сохранён!</b>\n\n"
+        f"✅ <b>Премиум выдан!</b>\n\n"
         f"👤 @{username}\n"
         f"📅 {days} дней\n"
         f"🕐 До: {datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')}",
@@ -1754,7 +1761,7 @@ async def main():
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
     logger.info("✅ Поиск работает")
-    logger.info("✅ Премиум сохраняется")
+    logger.info("✅ Останавливается на свободном")
     logger.info("✅ База данных сохраняется")
     
     try:

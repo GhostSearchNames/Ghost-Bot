@@ -1,8 +1,6 @@
 """
-👻 GHOST - Поиск Ников (Версия с веб-проверкой)
-- Проверка через Telegram API + Web страницу
-- Ищет только реально свободные ники
-- Проверяет Fragment аукцион
+👻 GHOST - Поиск Ников
+Версия: 33.0 - МУЛЬТИЯЗЫЧНАЯ
 """
 
 import asyncio
@@ -19,7 +17,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
-from aiogram import Bot, Dispatcher, types, F
+from aiogram import Bot, Dispatcher, types, F, html
 from aiogram.types import (
     Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton,
     PreCheckoutQuery, SuccessfulPayment, LabeledPrice,
@@ -60,6 +58,247 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════
+# ЯЗЫКИ
+# ═══════════════════════════════════════════════════════════════════
+
+LANGUAGES = {
+    "ru": {
+        "name": "🇷🇺 Русский",
+        "welcome": "👻 <b>Добро пожаловать в GHOST - Поиск Ников!</b>\n\nПривет, {name}! 👋\n\n🎯 <b>Что здесь можно делать?</b>\n• Находить свободные Telegram-ни́ки\n• Двойная проверка: API + Web\n• Получать рейтинг и стоимость ника\n\n📌 <b>Доступные режимы:</b>\n• 6 букв — бесплатно\n• 5 букв — только PREMIUM\n\n📌 <b>Для новичков:</b>\n• {requests} бесплатных поисков в день\n• После каждого поиска кд 30 секунд\n• Запросы обновляются каждые 2 дня (+3)\n• <b>Запрос не тратится, если ник не найден!</b>\n\n💎 <b>Премиум:</b>\n• Безлимитные поиски\n• Доступ к 5-буквенным никам\n\n<i>Разработчик: @gawuzu</i>",
+        "search": "🔍 ПОИСК ЮЗЕРНЕЙМА",
+        "search_desc": "✅ Двойная проверка:\n  • Telegram API — не занят профилем\n  • Web-страница — не на аукционе Fragment\n\n📌 Доступные режимы:\n  • 6 букв — бесплатно\n  • 5 букв — только PREMIUM\n\n📊 Осталось попыток: {requests}\n🎯 Поиск за 15 попыток\n💡 Запрос не тратится, если ник не найден!\n\n<b>Выберите режим:</b>",
+        "premium": "💎 ПРЕМИУМ ПОДПИСКА\n\n<b>ФУНКЦИИ:</b>\n• Безлимитный поиск\n• Доступ к 5-буквенным никам\n\n<b>ЦЕНЫ:</b>\n1 день — 65⭐\n3 дня — 150⭐\n10 дней — 400⭐\n30 дней — 800⭐",
+        "profile": "👤 ПРОФИЛЬ\n\n📌 ID: {id}\n📌 Имя: {name}\n📌 Юзернейм: @{username}\n\n📊 СТАТИСТИКА:\n• Найдено: {found}\n• Запросов: {requests}/{max}\n\n📋 Последние найденные:\n{nicks}\n\n💎 Премиум: {premium}",
+        "referral": "👥 РЕФЕРАЛЫ\n\n🔗 Ссылка:\n<code>{link}</code>\n\n<b>Награды:</b>\n• 7 → 1 день\n• 14 → 3 дня\n• 25 → 10 дней\n• 50 → 25 дней",
+        "info": "ℹ️ GHOST - Поиск Ников\n\n• Находит свободные ники 5-6 букв\n• Двойная проверка: API + Web\n• 15 попыток с прогрессом\n• Рейтинг и цена в $\n• Запрос не тратится если ник не найден\n• Оплата: Telegram Stars",
+        "help": "🆘 ПОДДЕРЖКА\n\nРазработчик: @gawuzu",
+        "found": "✅ Найден свободный ник!\n\n👤 Юзернейм: @{nick}\n📏 Длина: {length} символов\n{with_digits}⭐ Рейтинг: {rating}/10\n💰 Ценность: ${price}\n🎯 Найден за: {attempts} попыток",
+        "not_found": "❌ Свободный ник не найден\n\n⏳ Попыток: 15/15\n📋 Проверено: {checked} ников\n\n💡 Запрос не был потрачен!",
+        "copy": "📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
+        "premium_active": "\n✅ Активен: {days}д {hours}ч",
+        "premium_inactive": "\n❌ Не активен",
+        "dev_panel": "👑 ПАНЕЛЬ РАЗРАБОТЧИКА\n\nВыберите раздел:",
+        "dev_stats": "📊 СТАТИСТИКА БОТА\n\n👥 Пользователи: {users}\n🔍 Всего поисков: {searches}\n💎 Премиум: {premium}",
+        "dev_users": "👥 СПИСОК ПОЛЬЗОВАТЕЛЕЙ\n\nВсего: {total}\n\n{users}",
+        "dev_broadcast": "📢 РАССЫЛКА\n\nОтправьте сообщение для рассылки:",
+        "dev_promos": "🎁 УПРАВЛЕНИЕ ПРОМОКОДАМИ",
+        "dev_promo_create": "🎁 СОЗДАТЬ ПРОМОКОД\n\nВведите код (буквы и цифры):",
+        "dev_promo_list": "📋 СПИСОК ПРОМОКОДОВ",
+        "dev_promo_delete": "❌ УДАЛИТЬ ПРОМОКОД\n\nВведите код:",
+        "dev_give_premium": "💎 ВЫДАТЬ ПРЕМИУМ\n\nВведите ID пользователя:",
+        "dev_give_requests": "📦 ВЫДАТЬ ЗАПРОСЫ\n\nВведите ID пользователя:",
+        "premium_given": "✅ Премиум выдан!\n\n👤 @{username}\n📅 {days} дней\n🕐 До: {until}",
+        "requests_given": "✅ Запросы выданы!\n\n👤 @{username}\n📊 +{count} запросов",
+        "promo_created": "✅ Промокод создан!\n\n📌 Код: <code>{code}</code>\n📅 {days} дней\n👥 Лимит: {limit}",
+        "promo_deleted": "✅ Промокод {code} удален!",
+        "promo_not_found": "❌ Промокод {code} не найден!",
+        "choose_language": "🌍 <b>Выберите язык / Choose language / Виберіть мову / Выберыце мову / 选择语言 / Wähle Sprache:</b>",
+        "searching": "🔍 Поиск свободного ника...\n\n📏 Длина: {length} символов\n🔢 С цифрами: {digits}\n⏳ 0/{max}\n\n<i>Начинаю поиск...</i>",
+        "search_progress": "🔍 Поиск свободного ника...\n\n📏 Длина: {length} символов\n🔢 С цифрами: {digits}\n⏳ <b>{attempt}/{max}</b>\n\n🔎 Проверяю: <code>@{nick}</code>\n📋 Проверено: {checked} ников\n\n<i>Ищу свободный ник...</i>",
+        "search_found": "🎉 НАЙДЕН СВОБОДНЫЙ НИК!\n\n👤 <code>@{nick}</code>\n🎯 Найден на попытке {attempt}/{max}\n📋 Проверено: {checked} ников"
+    },
+    "en": {
+        "name": "🇬🇧 English",
+        "welcome": "👻 <b>Welcome to GHOST - Nick Finder!</b>\n\nHello, {name}! 👋\n\n🎯 <b>What can you do?</b>\n• Find free Telegram nicknames\n• Double check: API + Web\n• Get rating and price\n\n📌 <b>Available modes:</b>\n• 6 letters — free\n• 5 letters — only PREMIUM\n\n📌 <b>For beginners:</b>\n• {requests} free searches per day\n• 30 sec cooldown after each search\n• Requests reset every 2 days (+3)\n• <b>Request not wasted if not found!</b>\n\n💎 <b>Premium:</b>\n• Unlimited searches\n• Access to 5-letter nicks\n\n<i>Developer: @gawuzu</i>",
+        "search": "🔍 SEARCH USERNAME",
+        "search_desc": "✅ Double check:\n  • Telegram API — not occupied\n  • Web-page — not on Fragment auction\n\n📌 Available modes:\n  • 6 letters — free\n  • 5 letters — only PREMIUM\n\n📊 Remaining attempts: {requests}\n🎯 Search for 15 attempts\n💡 Request not wasted if not found!\n\n<b>Choose mode:</b>",
+        "premium": "💎 PREMIUM SUBSCRIPTION\n\n<b>FEATURES:</b>\n• Unlimited search\n• Access to 5-letter nicks\n\n<b>PRICES:</b>\n1 day — 65⭐\n3 days — 150⭐\n10 days — 400⭐\n30 days — 800⭐",
+        "profile": "👤 PROFILE\n\n📌 ID: {id}\n📌 Name: {name}\n📌 Username: @{username}\n\n📊 STATISTICS:\n• Found: {found}\n• Requests: {requests}/{max}\n\n📋 Last found:\n{nicks}\n\n💎 Premium: {premium}",
+        "referral": "👥 REFERRALS\n\n🔗 Link:\n<code>{link}</code>\n\n<b>Rewards:</b>\n• 7 → 1 day\n• 14 → 3 days\n• 25 → 10 days\n• 50 → 25 days",
+        "info": "ℹ️ GHOST - Nick Finder\n\n• Finds free 5-6 letter nicks\n• Double check: API + Web\n• 15 attempts with progress\n• Rating and price in $\n• Request not wasted if not found\n• Payment: Telegram Stars",
+        "help": "🆘 SUPPORT\n\nDeveloper: @gawuzu",
+        "found": "✅ Free nickname found!\n\n👤 Username: @{nick}\n📏 Length: {length} letters\n{with_digits}⭐ Rating: {rating}/10\n💰 Value: ${price}\n🎯 Found in: {attempts} attempts",
+        "not_found": "❌ Free nickname not found\n\n⏳ Attempts: 15/15\n📋 Checked: {checked} nicks\n\n💡 Request was not wasted!",
+        "copy": "📋 <code>@{nick}</code>\n\n✅ Nickname copied! Use it in Telegram.",
+        "premium_active": "\n✅ Active: {days}d {hours}h",
+        "premium_inactive": "\n❌ Not active",
+        "dev_panel": "👑 DEVELOPER PANEL\n\nChoose section:",
+        "dev_stats": "📊 BOT STATISTICS\n\n👥 Users: {users}\n🔍 Total searches: {searches}\n💎 Premium: {premium}",
+        "dev_users": "👥 USERS LIST\n\nTotal: {total}\n\n{users}",
+        "dev_broadcast": "📢 BROADCAST\n\nSend message for broadcast:",
+        "dev_promos": "🎁 PROMO CODES MANAGEMENT",
+        "dev_promo_create": "🎁 CREATE PROMO CODE\n\nEnter code (letters and numbers):",
+        "dev_promo_list": "📋 PROMO CODES LIST",
+        "dev_promo_delete": "❌ DELETE PROMO CODE\n\nEnter code:",
+        "dev_give_premium": "💎 GIVE PREMIUM\n\nEnter user ID:",
+        "dev_give_requests": "📦 GIVE REQUESTS\n\nEnter user ID:",
+        "premium_given": "✅ Premium given!\n\n👤 @{username}\n📅 {days} days\n🕐 Until: {until}",
+        "requests_given": "✅ Requests given!\n\n👤 @{username}\n📊 +{count} requests",
+        "promo_created": "✅ Promo code created!\n\n📌 Code: <code>{code}</code>\n📅 {days} days\n👥 Limit: {limit}",
+        "promo_deleted": "✅ Promo code {code} deleted!",
+        "promo_not_found": "❌ Promo code {code} not found!",
+        "choose_language": "🌍 <b>Choose language / Выберите язык / Виберіть мову / Выберыце мову / 选择语言 / Wähle Sprache:</b>",
+        "searching": "🔍 Searching for free nickname...\n\n📏 Length: {length} letters\n🔢 With digits: {digits}\n⏳ 0/{max}\n\n<i>Starting search...</i>",
+        "search_progress": "🔍 Searching for free nickname...\n\n📏 Length: {length} letters\n🔢 With digits: {digits}\n⏳ <b>{attempt}/{max}</b>\n\n🔎 Checking: <code>@{nick}</code>\n📋 Checked: {checked} nicks\n\n<i>Looking for free nickname...</i>",
+        "search_found": "🎉 FREE NICKNAME FOUND!\n\n👤 <code>@{nick}</code>\n🎯 Found on attempt {attempt}/{max}\n📋 Checked: {checked} nicks"
+    },
+    "ua": {
+        "name": "🇺🇦 Українська",
+        "welcome": "👻 <b>Ласкаво просимо до GHOST - Пошук Ніків!</b>\n\nПривіт, {name}! 👋\n\n🎯 <b>Що тут можна робити?</b>\n• Знаходити вільні Telegram-ніки\n• Подвійна перевірка: API + Web\n• Отримувати рейтинг та вартість ніка\n\n📌 <b>Доступні режими:</b>\n• 6 букв — безкоштовно\n• 5 букв — тільки PREMIUM\n\n📌 <b>Для новачків:</b>\n• {requests} безкоштовних пошуків на день\n• Після кожного пошуку кд 30 секунд\n• Запити оновлюються кожні 2 дні (+3)\n• <b>Запит не витрачається, якщо нік не знайдено!</b>\n\n💎 <b>Преміум:</b>\n• Безлімітні пошуки\n• Доступ до 5-буквених ніків\n\n<i>Розробник: @gawuzu</i>",
+        "search": "🔍 ПОШУК ЮЗЕРНЕЙМА",
+        "search_desc": "✅ Подвійна перевірка:\n  • Telegram API — не зайнятий\n  • Web-сторінка — не на аукціоні Fragment\n\n📌 Доступні режими:\n  • 6 букв — безкоштовно\n  • 5 букв — тільки PREMIUM\n\n📊 Залишилось спроб: {requests}\n🎯 Пошук за 15 спроб\n💡 Запит не витрачається, якщо нік не знайдено!\n\n<b>Виберіть режим:</b>",
+        "premium": "💎 ПРЕМІУМ ПІДПИСКА\n\n<b>ФУНКЦІЇ:</b>\n• Безлімітний пошук\n• Доступ до 5-буквених ніків\n\n<b>ЦІНИ:</b>\n1 день — 65⭐\n3 дні — 150⭐\n10 днів — 400⭐\n30 днів — 800⭐",
+        "profile": "👤 ПРОФІЛЬ\n\n📌 ID: {id}\n📌 Ім'я: {name}\n📌 Юзернейм: @{username}\n\n📊 СТАТИСТИКА:\n• Знайдено: {found}\n• Запитів: {requests}/{max}\n\n📋 Останні знайдені:\n{nicks}\n\n💎 Преміум: {premium}",
+        "referral": "👥 РЕФЕРАЛИ\n\n🔗 Посилання:\n<code>{link}</code>\n\n<b>Нагороди:</b>\n• 7 → 1 день\n• 14 → 3 дні\n• 25 → 10 днів\n• 50 → 25 днів",
+        "info": "ℹ️ GHOST - Пошук Ніків\n\n• Знаходить вільні ніки 5-6 букв\n• Подвійна перевірка: API + Web\n• 15 спроб з прогресом\n• Рейтинг та ціна в $\n• Запит не витрачається якщо нік не знайдено\n• Оплата: Telegram Stars",
+        "help": "🆘 ПІДТРИМКА\n\nРозробник: @gawuzu",
+        "found": "✅ Знайдено вільний нік!\n\n👤 Юзернейм: @{nick}\n📏 Довжина: {length} символів\n{with_digits}⭐ Рейтинг: {rating}/10\n💰 Цінність: ${price}\n🎯 Знайдено за: {attempts} спроб",
+        "not_found": "❌ Вільний нік не знайдено\n\n⏳ Спроб: 15/15\n📋 Перевірено: {checked} ніків\n\n💡 Запит не був витрачений!",
+        "copy": "📋 <code>@{nick}</code>\n\n✅ Нік скопійовано! Використовуйте його в Telegram.",
+        "premium_active": "\n✅ Активний: {days}д {hours}год",
+        "premium_inactive": "\n❌ Не активний",
+        "dev_panel": "👑 ПАНЕЛЬ РОЗРОБНИКА\n\nВиберіть розділ:",
+        "dev_stats": "📊 СТАТИСТИКА БОТА\n\n👥 Користувачі: {users}\n🔍 Всього пошуків: {searches}\n💎 Преміум: {premium}",
+        "dev_users": "👥 СПИСОК КОРИСТУВАЧІВ\n\nВсього: {total}\n\n{users}",
+        "dev_broadcast": "📢 РОЗСИЛКА\n\nНадішліть повідомлення для розсилки:",
+        "dev_promos": "🎁 УПРАВЛІННЯ ПРОМОКОДАМИ",
+        "dev_promo_create": "🎁 СТВОРИТИ ПРОМОКОД\n\nВведіть код (букви та цифри):",
+        "dev_promo_list": "📋 СПИСОК ПРОМОКОДІВ",
+        "dev_promo_delete": "❌ ВИДАЛИТИ ПРОМОКОД\n\nВведіть код:",
+        "dev_give_premium": "💎 ВИДАТИ ПРЕМІУМ\n\nВведіть ID користувача:",
+        "dev_give_requests": "📦 ВИДАТИ ЗАПИТИ\n\nВведіть ID користувача:",
+        "premium_given": "✅ Преміум видано!\n\n👤 @{username}\n📅 {days} днів\n🕐 До: {until}",
+        "requests_given": "✅ Запити видано!\n\n👤 @{username}\n📊 +{count} запитів",
+        "promo_created": "✅ Промокод створено!\n\n📌 Код: <code>{code}</code>\n📅 {days} днів\n👥 Ліміт: {limit}",
+        "promo_deleted": "✅ Промокод {code} видалено!",
+        "promo_not_found": "❌ Промокод {code} не знайдено!",
+        "choose_language": "🌍 <b>Оберіть мову / Выберите язык / Choose language / Выберыце мову / 选择语言 / Wähle Sprache:</b>",
+        "searching": "🔍 Пошук вільного ніка...\n\n📏 Довжина: {length} символів\n🔢 З цифрами: {digits}\n⏳ 0/{max}\n\n<i>Починаю пошук...</i>",
+        "search_progress": "🔍 Пошук вільного ніка...\n\n📏 Довжина: {length} символів\n🔢 З цифрами: {digits}\n⏳ <b>{attempt}/{max}</b>\n\n🔎 Перевіряю: <code>@{nick}</code>\n📋 Перевірено: {checked} ніків\n\n<i>Шукаю вільний нік...</i>",
+        "search_found": "🎉 ЗНАЙДЕНО ВІЛЬНИЙ НІК!\n\n👤 <code>@{nick}</code>\n🎯 Знайдено на спробі {attempt}/{max}\n📋 Перевірено: {checked} ніків"
+    },
+    "be": {
+        "name": "🇧🇾 Беларуская",
+        "welcome": "👻 <b>Сардэчна запрашаем у GHOST - Пошук Нікаў!</b>\n\nПрывітанне, {name}! 👋\n\n🎯 <b>Што тут можна рабіць?</b>\n• Знаходзіць вольныя Telegram-нікі\n• Падвойная праверка: API + Web\n• Атрымліваць рэйтынг і кошт ніка\n\n📌 <b>Даступныя рэжымы:</b>\n• 6 літар — бясплатна\n• 5 літар — толькі PREMIUM\n\n📌 <b>Для пачаткоўцаў:</b>\n• {requests} бясплатных пошукаў у дзень\n• Пасля кожнага пошуку кд 30 секунд\n• Запыты абнаўляюцца кожныя 2 дні (+3)\n• <b>Запыт не выдаткаваецца, калі нік не знойдзены!</b>\n\n💎 <b>Прэміум:</b>\n• Безлімітныя пошукі\n• Доступ да 5-літарных нікаў\n\n<i>Распрацоўшчык: @gawuzu</i>",
+        "search": "🔍 ПОШУК ЮЗЕРНЕЙМА",
+        "search_desc": "✅ Падвойная праверка:\n  • Telegram API — не заняты\n  • Web-старонка — не на аўкцыёне Fragment\n\n📌 Даступныя рэжымы:\n  • 6 літар — бясплатна\n  • 5 літар — толькі PREMIUM\n\n📊 Засталося спроб: {requests}\n🎯 Пошук за 15 спроб\n💡 Запыт не выдаткаваецца, калі нік не знойдзены!\n\n<b>Абярыце рэжым:</b>",
+        "premium": "💎 ПРЭМІУМ ПАДПІСКА\n\n<b>ФУНКЦЫІ:</b>\n• Безлімітны пошук\n• Доступ да 5-літарных нікаў\n\n<b>ЦЭНЫ:</b>\n1 дзень — 65⭐\n3 дні — 150⭐\n10 дзён — 400⭐\n30 дзён — 800⭐",
+        "profile": "👤 ПРОФІЛЬ\n\n📌 ID: {id}\n📌 Імя: {name}\n📌 Юзернейм: @{username}\n\n📊 СТАТЫСТЫКА:\n• Знойдзена: {found}\n• Запытаў: {requests}/{max}\n\n📋 Апошнія знойдзеныя:\n{nicks}\n\n💎 Прэміум: {premium}",
+        "referral": "👥 РЭФЕРАЛЫ\n\n🔗 Спасылка:\n<code>{link}</code>\n\n<b>Узнагароды:</b>\n• 7 → 1 дзень\n• 14 → 3 дні\n• 25 → 10 дзён\n• 50 → 25 дзён",
+        "info": "ℹ️ GHOST - Пошук Нікаў\n\n• Знаходзіць вольныя нікі 5-6 літар\n• Падвойная праверка: API + Web\n• 15 спроб з прагрэсам\n• Рэйтынг і кошт у $\n• Запыт не выдаткаваецца калі нік не знойдзены\n• Аплата: Telegram Stars",
+        "help": "🆘 ПАДТРЫМКА\n\nРаспрацоўшчык: @gawuzu",
+        "found": "✅ Знойдзены вольны нік!\n\n👤 Юзернейм: @{nick}\n📏 Даўжыня: {length} сімвалаў\n{with_digits}⭐ Рэйтынг: {rating}/10\n💰 Каштоўнасць: ${price}\n🎯 Знойдзена за: {attempts} спроб",
+        "not_found": "❌ Вольны нік не знойдзены\n\n⏳ Спробаў: 15/15\n📋 Праверана: {checked} нікаў\n\n💡 Запыт не быў выдаткаваны!",
+        "copy": "📋 <code>@{nick}</code>\n\n✅ Нік скапіяваны! Выкарыстоўвайце яго ў Telegram.",
+        "premium_active": "\n✅ Актыўны: {days}д {hours}г",
+        "premium_inactive": "\n❌ Не актыўны",
+        "dev_panel": "👑 ПАНЭЛЬ РАСПРАЦОЎШЧЫКА\n\nАбярыце раздзел:",
+        "dev_stats": "📊 СТАТЫСТЫКА БОТА\n\n👥 Карыстальнікі: {users}\n🔍 Усяго пошукаў: {searches}\n💎 Прэміум: {premium}",
+        "dev_users": "👥 СПІС КАРЫСТАЛЬНІКАЎ\n\nУсяго: {total}\n\n{users}",
+        "dev_broadcast": "📢 РАССЫЛКА\n\nАдпраўце паведамленне для рассылкі:",
+        "dev_promos": "🎁 КІРАВАННЕ ПРОМАКОДАМІ",
+        "dev_promo_create": "🎁 СТВАРЫЦЬ ПРОМАКОД\n\nУвядзіце код (літары і лічбы):",
+        "dev_promo_list": "📋 СПІС ПРОМАКОДАЎ",
+        "dev_promo_delete": "❌ ВЫДАЛІЦЬ ПРОМАКОД\n\nУвядзіце код:",
+        "dev_give_premium": "💎 ВЫДАЦЬ ПРЭМІУМ\n\nУвядзіце ID карыстальніка:",
+        "dev_give_requests": "📦 ВЫДАЦЬ ЗАПЫТЫ\n\nУвядзіце ID карыстальніка:",
+        "premium_given": "✅ Прэміум выдадзены!\n\n👤 @{username}\n📅 {days} дзён\n🕐 Да: {until}",
+        "requests_given": "✅ Запыты выдадзены!\n\n👤 @{username}\n📊 +{count} запытаў",
+        "promo_created": "✅ Промаход створаны!\n\n📌 Код: <code>{code}</code>\n📅 {days} дзён\n👥 Ліміт: {limit}",
+        "promo_deleted": "✅ Промаход {code} выдалены!",
+        "promo_not_found": "❌ Промаход {code} не знойдзены!",
+        "choose_language": "🌍 <b>Абярыце мову / Выберите язык / Choose language / Виберіть мову / 选择语言 / Wähle Sprache:</b>",
+        "searching": "🔍 Пошук вольнага ніка...\n\n📏 Даўжыня: {length} сімвалаў\n🔢 З лічбамі: {digits}\n⏳ 0/{max}\n\n<i>Пачынаю пошук...</i>",
+        "search_progress": "🔍 Пошук вольнага ніка...\n\n📏 Даўжыня: {length} сімвалаў\n🔢 З лічбамі: {digits}\n⏳ <b>{attempt}/{max}</b>\n\n🔎 Правяраю: <code>@{nick}</code>\n📋 Праверана: {checked} нікаў\n\n<i>Шукаю вольны нік...</i>",
+        "search_found": "🎉 ЗНОЙДЗЕНЫ ВОЛЬНЫ НІК!\n\n👤 <code>@{nick}</code>\n🎯 Знойдзены на спробе {attempt}/{max}\n📋 Праверана: {checked} нікаў"
+    },
+    "zh": {
+        "name": "🇨🇳 中文",
+        "welcome": "👻 <b>欢迎来到 GHOST - 昵称查找器！</b>\n\n你好，{name}！👋\n\n🎯 <b>你可以做什么？</b>\n• 查找免费的 Telegram 昵称\n• 双重检查：API + Web\n• 获取评级和价格\n\n📌 <b>可用模式：</b>\n• 6 个字母 — 免费\n• 5 个字母 — 仅限 PREMIUM\n\n📌 <b>初学者：</b>\n• 每天 {requests} 次免费搜索\n• 每次搜索后冷却 30 秒\n• 每 2 天重置请求 (+3)\n• <b>如果未找到，请求不会浪费！</b>\n\n💎 <b>高级版：</b>\n• 无限搜索\n• 访问 5 个字母的昵称\n\n<i>开发者：@gawuzu</i>",
+        "search": "🔍 搜索用户名",
+        "search_desc": "✅ 双重检查：\n  • Telegram API — 未被占用\n  • 网页 — 不在 Fragment 拍卖中\n\n📌 可用模式：\n  • 6 个字母 — 免费\n  • 5 个字母 — 仅限 PREMIUM\n\n📊 剩余尝试次数：{requests}\n🎯 搜索 15 次\n💡 如果未找到，请求不会浪费！\n\n<b>选择模式：</b>",
+        "premium": "💎 高级订阅\n\n<b>功能：</b>\n• 无限搜索\n• 访问 5 个字母的昵称\n\n<b>价格：</b>\n1 天 — 65⭐\n3 天 — 150⭐\n10 天 — 400⭐\n30 天 — 800⭐",
+        "profile": "👤 个人资料\n\n📌 ID：{id}\n📌 姓名：{name}\n📌 用户名：@{username}\n\n📊 统计：\n• 找到：{found}\n• 请求：{requests}/{max}\n\n📋 最后找到：\n{nicks}\n\n💎 高级版：{premium}",
+        "referral": "👥 推荐\n\n🔗 链接：\n<code>{link}</code>\n\n<b>奖励：</b>\n• 7 → 1 天\n• 14 → 3 天\n• 25 → 10 天\n• 50 → 25 天",
+        "info": "ℹ️ GHOST - 昵称查找器\n\n• 查找免费的 5-6 字母昵称\n• 双重检查：API + Web\n• 15 次尝试带进度\n• 评级和价格（美元）\n• 如果未找到，请求不会浪费\n• 支付：Telegram Stars",
+        "help": "🆘 支持\n\n开发者：@gawuzu",
+        "found": "✅ 找到免费昵称！\n\n👤 用户名：@{nick}\n📏 长度：{length} 个字符\n{with_digits}⭐ 评级：{rating}/10\n💰 价值：${price}\n🎯 找到于：{attempts} 次尝试",
+        "not_found": "❌ 未找到免费昵称\n\n⏳ 尝试次数：15/15\n📋 已检查：{checked} 个昵称\n\n💡 请求未被浪费！",
+        "copy": "📋 <code>@{nick}</code>\n\n✅ 昵称已复制！在 Telegram 中使用它。",
+        "premium_active": "\n✅ 有效：{days}天 {hours}小时",
+        "premium_inactive": "\n❌ 无效",
+        "dev_panel": "👑 开发者面板\n\n选择部分：",
+        "dev_stats": "📊 机器人统计\n\n👥 用户：{users}\n🔍 总搜索次数：{searches}\n💎 高级版：{premium}",
+        "dev_users": "👥 用户列表\n\n总计：{total}\n\n{users}",
+        "dev_broadcast": "📢 广播\n\n发送消息进行广播：",
+        "dev_promos": "🎁 促销代码管理",
+        "dev_promo_create": "🎁 创建促销代码\n\n输入代码（字母和数字）：",
+        "dev_promo_list": "📋 促销代码列表",
+        "dev_promo_delete": "❌ 删除促销代码\n\n输入代码：",
+        "dev_give_premium": "💎 给予高级版\n\n输入用户 ID：",
+        "dev_give_requests": "📦 给予请求\n\n输入用户 ID：",
+        "premium_given": "✅ 已给予高级版！\n\n👤 @{username}\n📅 {days} 天\n🕐 直到：{until}",
+        "requests_given": "✅ 已给予请求！\n\n👤 @{username}\n📊 +{count} 请求",
+        "promo_created": "✅ 促销代码已创建！\n\n📌 代码：<code>{code}</code>\n📅 {days} 天\n👥 限制：{limit}",
+        "promo_deleted": "✅ 促销代码 {code} 已删除！",
+        "promo_not_found": "❌ 促销代码 {code} 未找到！",
+        "choose_language": "🌍 <b>选择语言 / Choose language / Выберите язык / Виберіть мову / Выберыце мову / 选择语言 / Wähle Sprache:</b>",
+        "searching": "🔍 正在搜索免费昵称...\n\n📏 长度：{length} 个字符\n🔢 带数字：{digits}\n⏳ 0/{max}\n\n<i>开始搜索...</i>",
+        "search_progress": "🔍 正在搜索免费昵称...\n\n📏 长度：{length} 个字符\n🔢 带数字：{digits}\n⏳ <b>{attempt}/{max}</b>\n\n🔎 检查：<code>@{nick}</code>\n📋 已检查：{checked} 个昵称\n\n<i>寻找免费昵称...</i>",
+        "search_found": "🎉 找到免费昵称！\n\n👤 <code>@{nick}</code>\n🎯 找到于尝试 {attempt}/{max}\n📋 已检查：{checked} 个昵称"
+    },
+    "de": {
+        "name": "🇩🇪 Deutsch",
+        "welcome": "👻 <b>Willkommen bei GHOST - Nick Finder!</b>\n\nHallo, {name}! 👋\n\n🎯 <b>Was kann man hier machen?</b>\n• Kostenlose Telegram-Nicknames finden\n• Doppelte Prüfung: API + Web\n• Bewertung und Preis erhalten\n\n📌 <b>Verfügbare Modi:</b>\n• 6 Buchstaben — kostenlos\n• 5 Buchstaben — nur PREMIUM\n\n📌 <b>Für Anfänger:</b>\n• {requests} kostenlose Suchanfragen pro Tag\n• 30 Sekunden Abklingzeit nach jeder Suche\n• Anfragen werden alle 2 Tage zurückgesetzt (+3)\n• <b>Anfrage wird nicht verschwendet, wenn nicht gefunden!</b>\n\n💎 <b>Premium:</b>\n• Unbegrenzte Suchanfragen\n• Zugang zu 5-Buchstaben-Nicks\n\n<i>Entwickler: @gawuzu</i>",
+        "search": "🔍 BENUTZERNAME SUCHEN",
+        "search_desc": "✅ Doppelte Prüfung:\n  • Telegram API — nicht belegt\n  • Webseite — nicht auf Fragment-Auktion\n\n📌 Verfügbare Modi:\n  • 6 Buchstaben — kostenlos\n  • 5 Buchstaben — nur PREMIUM\n\n📊 Verbleibende Versuche: {requests}\n🎯 Suche nach 15 Versuchen\n💡 Anfrage wird nicht verschwendet, wenn nicht gefunden!\n\n<b>Wähle Modus:</b>",
+        "premium": "💎 PREMIUM-ABONNEMENT\n\n<b>FUNKTIONEN:</b>\n• Unbegrenzte Suche\n• Zugang zu 5-Buchstaben-Nicks\n\n<b>PREISE:</b>\n1 Tag — 65⭐\n3 Tage — 150⭐\n10 Tage — 400⭐\n30 Tage — 800⭐",
+        "profile": "👤 PROFIL\n\n📌 ID: {id}\n📌 Name: {name}\n📌 Benutzername: @{username}\n\n📊 STATISTIK:\n• Gefunden: {found}\n• Anfragen: {requests}/{max}\n\n📋 Letzte Funde:\n{nicks}\n\n💎 Premium: {premium}",
+        "referral": "👥 EMPFEHLUNGEN\n\n🔗 Link:\n<code>{link}</code>\n\n<b>Belohnungen:</b>\n• 7 → 1 Tag\n• 14 → 3 Tage\n• 25 → 10 Tage\n• 50 → 25 Tage",
+        "info": "ℹ️ GHOST - Nick Finder\n\n• Findet kostenlose 5-6 Buchstaben Nicks\n• Doppelte Prüfung: API + Web\n• 15 Versuche mit Fortschritt\n• Bewertung und Preis in $\n• Anfrage wird nicht verschwendet wenn nicht gefunden\n• Zahlung: Telegram Stars",
+        "help": "🆘 UNTERSTÜTZUNG\n\nEntwickler: @gawuzu",
+        "found": "✅ Kostenloser Nickname gefunden!\n\n👤 Benutzername: @{nick}\n📏 Länge: {length} Zeichen\n{with_digits}⭐ Bewertung: {rating}/10\n💰 Wert: ${price}\n🎯 Gefunden in: {attempts} Versuchen",
+        "not_found": "❌ Kein kostenloser Nickname gefunden\n\n⏳ Versuche: 15/15\n📋 Geprüft: {checked} Nicks\n\n💡 Anfrage wurde nicht verschwendet!",
+        "copy": "📋 <code>@{nick}</code>\n\n✅ Nickname kopiert! Verwenden Sie ihn in Telegram.",
+        "premium_active": "\n✅ Aktiv: {days}T {hours}St",
+        "premium_inactive": "\n❌ Nicht aktiv",
+        "dev_panel": "👑 ENTWICKLER-PANEL\n\nWähle Bereich:",
+        "dev_stats": "📊 BOT-STATISTIK\n\n👥 Benutzer: {users}\n🔍 Suchanfragen: {searches}\n💎 Premium: {premium}",
+        "dev_users": "👥 BENUTZERLISTE\n\nInsgesamt: {total}\n\n{users}",
+        "dev_broadcast": "📢 RUNDSENDUNG\n\nSende Nachricht für Rundsendung:",
+        "dev_promos": "🎁 PROMO-CODE-VERWALTUNG",
+        "dev_promo_create": "🎁 PROMO-CODE ERSTELLEN\n\nCode eingeben (Buchstaben und Zahlen):",
+        "dev_promo_list": "📋 PROMO-CODE-LISTE",
+        "dev_promo_delete": "❌ PROMO-CODE LÖSCHEN\n\nCode eingeben:",
+        "dev_give_premium": "💎 PREMIUM GEBEN\n\nBenutzer-ID eingeben:",
+        "dev_give_requests": "📦 ANFRAGEN GEBEN\n\nBenutzer-ID eingeben:",
+        "premium_given": "✅ Premium gegeben!\n\n👤 @{username}\n📅 {days} Tage\n🕐 Bis: {until}",
+        "requests_given": "✅ Anfragen gegeben!\n\n👤 @{username}\n📊 +{count} Anfragen",
+        "promo_created": "✅ Promo-Code erstellt!\n\n📌 Code: <code>{code}</code>\n📅 {days} Tage\n👥 Limit: {limit}",
+        "promo_deleted": "✅ Promo-Code {code} gelöscht!",
+        "promo_not_found": "❌ Promo-Code {code} nicht gefunden!",
+        "choose_language": "🌍 <b>Sprache wählen / Выберите язык / Choose language / Виберіть мову / Выберыце мову / 选择语言 / Wähle Sprache:</b>",
+        "searching": "🔍 Suche nach kostenlosem Nick...\n\n📏 Länge: {length} Zeichen\n🔢 Mit Ziffern: {digits}\n⏳ 0/{max}\n\n<i>Suche startet...</i>",
+        "search_progress": "🔍 Suche nach kostenlosem Nick...\n\n📏 Länge: {length} Zeichen\n🔢 Mit Ziffern: {digits}\n⏳ <b>{attempt}/{max}</b>\n\n🔎 Prüfe: <code>@{nick}</code>\n📋 Geprüft: {checked} Nicks\n\n<i>Suche nach kostenlosem Nick...</i>",
+        "search_found": "🎉 KOSTENLOSER NICK GEFUNDEN!\n\n👤 <code>@{nick}</code>\n🎯 Gefunden bei Versuch {attempt}/{max}\n📋 Geprüft: {checked} Nicks"
+    }
+}
+
+# ═══════════════════════════════════════════════════════════════════
+# КЛАСС ДЛЯ РАБОТЫ С ЯЗЫКАМИ
+# ═══════════════════════════════════════════════════════════════════
+
+class LanguageManager:
+    def __init__(self):
+        self.user_lang = {}
+    
+    def get_lang(self, user_id: int) -> str:
+        return self.user_lang.get(user_id, "ru")
+    
+    def set_lang(self, user_id: int, lang: str):
+        self.user_lang[user_id] = lang
+    
+    def get_text(self, user_id: int, key: str, **kwargs) -> str:
+        lang = self.get_lang(user_id)
+        text = LANGUAGES.get(lang, LANGUAGES["ru"]).get(key, key)
+        try:
+            return text.format(**kwargs)
+        except:
+            return text
+
+lang_manager = LanguageManager()
+
+# ═══════════════════════════════════════════════════════════════════
 # СОСТОЯНИЯ FSM
 # ═══════════════════════════════════════════════════════════════════
 
@@ -74,6 +313,9 @@ class DevStates(StatesGroup):
     waiting_for_promo_days = State()
     waiting_for_promo_limit = State()
     waiting_for_broadcast = State()
+
+class LangStates(StatesGroup):
+    choosing_language = State()
 
 # ═══════════════════════════════════════════════════════════════════
 # БАЗА ДАННЫХ (SQLite)
@@ -140,7 +382,8 @@ class Database:
                 ban_status INTEGER DEFAULT 0,
                 ban_reason TEXT,
                 referral_earnings INTEGER DEFAULT 0,
-                is_developer INTEGER DEFAULT 0
+                is_developer INTEGER DEFAULT 0,
+                language TEXT DEFAULT 'ru'
             )
         ''')
         
@@ -197,7 +440,8 @@ class Database:
                 "ban_status": bool(row[10]),
                 "ban_reason": row[11] or "",
                 "referral_earnings": row[12] or 0,
-                "is_developer": bool(row[13]) if len(row) > 13 else False
+                "is_developer": bool(row[13]) if len(row) > 13 else False,
+                "language": row[14] if len(row) > 14 else "ru"
             }
         else:
             current_time = int(time.time())
@@ -207,12 +451,12 @@ class Database:
                     user_id, username, first_name, registered_at,
                     free_requests, free_requests_reset, free_requests_last_update,
                     premium_until, last_search, total_searches,
-                    ban_status, ban_reason, referral_earnings, is_developer
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ban_status, ban_reason, referral_earnings, is_developer, language
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 user_id, "", "", current_time,
                 MAX_FREE_REQUESTS, current_time + 86400, current_time,
-                0, 0, 0, 0, "", 0, is_dev
+                0, 0, 0, 0, "", 0, is_dev, "ru"
             ))
             self.conn.commit()
             self.backup_db()
@@ -337,6 +581,14 @@ class Database:
     def set_developer(self, user_id: int):
         self.update_user_field(user_id, "is_developer", 1)
     
+    def get_language(self, user_id: int) -> str:
+        user = self.get_user(user_id)
+        return user.get("language", "ru")
+    
+    def set_language(self, user_id: int, lang: str):
+        self.update_user_field(user_id, "language", lang)
+        lang_manager.set_lang(user_id, lang)
+    
     def create_promo(self, code: str, days: int, max_uses: int, created_by: int) -> bool:
         try:
             self.cursor.execute('''
@@ -408,23 +660,34 @@ db = Database()
 # ═══════════════════════════════════════════════════════════════════
 
 def generate_cool_username(length: int = None) -> str:
-    """Генерирует красивые читаемые ники (без цифр и подчёркиваний)"""
+    """Генерирует красивые читаемые ники"""
     if length is None:
         length = random.choice([5, 6])
     
     vowels = "aeiouy"
     consonants = "bcdfghjklmnpqrstvwxz"
     
-    username = ""
-    start_with_vowel = random.choice([True, False])
+    # Стили генерации
+    style = random.choice(['classic', 'with_underscore', 'short_prefix'])
     
-    for i in range(length):
-        if (i % 2 == 0 and start_with_vowel) or (i % 2 != 0 and not start_with_vowel):
-            username += random.choice(vowels)
-        else:
-            username += random.choice(consonants)
-    
-    return username
+    if style == 'classic':
+        username = ""
+        start_vowel = random.choice([True, False])
+        for i in range(length):
+            if (i % 2 == 0 and start_vowel) or (i % 2 != 0 and not start_vowel):
+                username += random.choice(vowels)
+            else:
+                username += random.choice(consonants)
+        return username
+    elif style == 'with_underscore':
+        part1 = "".join(random.choice(consonants if i%2==0 else vowels) for i in range(2))
+        part2 = "".join(random.choice(vowels if i%2==0 else consonants) for i in range(2))
+        return f"{part1}_{part2}"
+    else:
+        prefix = random.choice(['x', 'z', 'v', 'm', 'q', 'n', 'b'])
+        body_len = length - 2
+        body = "".join(random.choice(consonants if i%2==0 else vowels) for i in range(body_len))
+        return f"{prefix}_{body}"
 
 # ═══════════════════════════════════════════════════════════════════
 # ГЕНЕРАТОР НИКОВ + ПОИСК (С ВЕБ-ПРОВЕРКОЙ)
@@ -448,42 +711,35 @@ class NickGenerator:
         2. Через веб-страницу t.me (проверка Fragment)
         """
         try:
-            # 1. Проверка через API
             await self.bot.get_chat(f"@{nick}")
             logger.info(f"❌ @{nick} - ЗАНЯТ (API)")
             return False
         except TelegramBadRequest as e:
             if "chat not found" in str(e).lower():
-                # 2. Проверка через веб-страницу
                 try:
                     session = await self.get_session()
                     url = f"https://t.me/{nick}"
                     async with session.get(url) as response:
                         if response.status == 200:
                             html_text = await response.text()
-                            
-                            # Проверяем наличие признаков занятости
                             if 'tgme_page_extra' in html_text or 'tgme_page_title' in html_text:
-                                logger.info(f"❌ @{nick} - ЗАНЯТ (веб-страница существует)")
+                                logger.info(f"❌ @{nick} - ЗАНЯТ (веб-страница)")
                                 return False
-                            
-                            # Проверка на Fragment
                             if "fragment.com" in html_text.lower():
-                                logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT")
+                                logger.info(f"❌ @{nick} - НА АУКЦИОНЕ")
                                 return False
-                            
                             logger.info(f"✅ @{nick} - СВОБОДЕН!")
                             return True
                 except Exception as e:
-                    logger.info(f"⚠️ @{nick} - Ошибка веб-проверки: {e}")
-                    return True  # Если сайт не ответил, считаем свободным
+                    logger.info(f"⚠️ Веб-ошибка: {e}")
+                    return True
             return False
         except Exception as e:
             logger.info(f"⚠️ @{nick} - Ошибка: {e}")
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
-                          message=None) -> Tuple[Optional[str], int, List[str]]:
+                          message=None, lang="ru") -> Tuple[Optional[str], int, List[str]]:
         """Ищет свободный ник"""
         MAX_ATTEMPTS = 15
         attempts = 0
@@ -491,20 +747,21 @@ class NickGenerator:
         found = None
         found_attempt = 0
         
+        lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+        
         if message:
             await message.edit_text(
-                f"🔍 <b>Поиск свободного ника...</b>\n\n"
-                f"📏 Длина: {length} символов\n"
-                f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-                f"⏳ 0/{MAX_ATTEMPTS}\n\n"
-                f"<i>Начинаю поиск...</i>",
+                lang_text["searching"].format(
+                    length=length,
+                    digits="Да" if with_digits else "Нет",
+                    max=MAX_ATTEMPTS
+                ),
                 parse_mode="HTML"
             )
         
         while attempts < MAX_ATTEMPTS:
             attempts += 1
             
-            # Генерируем красивый ник
             if with_digits:
                 nick = generate_cool_username(length) + str(random.randint(0, 9))
                 if len(nick) > length:
@@ -519,16 +776,17 @@ class NickGenerator:
             checked.append(nick)
             
             if message:
-                progress_text = (
-                    f"🔍 <b>Поиск свободного ника...</b>\n\n"
-                    f"📏 Длина: {length} символов\n"
-                    f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-                    f"⏳ <b>{attempts}/{MAX_ATTEMPTS}</b>\n\n"
-                    f"🔎 Проверяю: <code>@{nick}</code>\n"
-                    f"📋 Проверено: {len(checked)} ников\n\n"
-                    f"<i>Ищу свободный ник...</i>"
+                await message.edit_text(
+                    lang_text["search_progress"].format(
+                        length=length,
+                        digits="Да" if with_digits else "Нет",
+                        attempt=attempts,
+                        max=MAX_ATTEMPTS,
+                        nick=nick,
+                        checked=len(checked)
+                    ),
+                    parse_mode="HTML"
                 )
-                await message.edit_text(progress_text, parse_mode="HTML")
             
             logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
             
@@ -539,22 +797,23 @@ class NickGenerator:
                 found_attempt = attempts
                 if message:
                     await message.edit_text(
-                        f"🎉 <b>НАЙДЕН СВОБОДНЫЙ НИК!</b>\n\n"
-                        f"👤 <code>@{nick}</code>\n"
-                        f"🎯 Найден на попытке {attempts}/{MAX_ATTEMPTS}\n"
-                        f"📋 Проверено: {len(checked)} ников",
+                        lang_text["search_found"].format(
+                            nick=nick,
+                            attempt=attempts,
+                            max=MAX_ATTEMPTS,
+                            checked=len(checked)
+                        ),
                         parse_mode="HTML"
                     )
                 break
             
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(1.2)
         
         if not found and message:
             await message.edit_text(
-                f"❌ <b>Свободный ник не найден</b>\n\n"
-                f"⏳ Попыток: {MAX_ATTEMPTS}/{MAX_ATTEMPTS}\n"
-                f"📋 Проверено: {len(checked)} ников\n\n"
-                f"💡 Запрос не потрачен! Попробуйте другой режим.",
+                lang_text["not_found"].format(
+                    checked=len(checked)
+                ),
                 parse_mode="HTML"
             )
         
@@ -657,12 +916,30 @@ image_gen = ImageGenerator()
 
 class Keyboards:
     @staticmethod
+    def language_menu() -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru"),
+                InlineKeyboardButton(text="🇬🇧 English", callback_data="lang_en")
+            ],
+            [
+                InlineKeyboardButton(text="🇺🇦 Українська", callback_data="lang_ua"),
+                InlineKeyboardButton(text="🇧🇾 Беларуская", callback_data="lang_be")
+            ],
+            [
+                InlineKeyboardButton(text="🇨🇳 中文", callback_data="lang_zh"),
+                InlineKeyboardButton(text="🇩🇪 Deutsch", callback_data="lang_de")
+            ]
+        ])
+    
+    @staticmethod
     def main_menu(is_developer: bool = False) -> InlineKeyboardMarkup:
         buttons = [
             [InlineKeyboardButton(text="🔍 Поиск", callback_data="menu_search")],
             [InlineKeyboardButton(text="💎 Премиум", callback_data="menu_premium")],
             [InlineKeyboardButton(text="👤 Профиль", callback_data="menu_profile")],
             [InlineKeyboardButton(text="👥 Рефералы", callback_data="menu_referrals")],
+            [InlineKeyboardButton(text="🌍 Язык", callback_data="menu_language")],
             [InlineKeyboardButton(text="ℹ️ Информация", callback_data="menu_info")],
             [InlineKeyboardButton(text="🆘 Поддержка", callback_data="menu_help")]
         ]
@@ -784,39 +1061,63 @@ async def cmd_start(message: Message, command: CommandObject):
         db.update_user_field(user_id, "username", username)
         db.update_user_field(user_id, "first_name", first_name)
     
-    is_dev = db.is_developer(user_id)
+    # Проверяем язык пользователя
+    lang = db.get_language(user_id)
+    lang_manager.set_lang(user_id, lang)
     
-    text = f"""
-👻 <b>Добро пожаловать в GHOST - Поиск Ников!</b>
-
-Привет, {first_name}! 👋
-
-🎯 <b>Что здесь можно делать?</b>
-• Находить свободные Telegram-ни́ки
-• Двойная проверка: API + Web
-• Получать рейтинг и стоимость ника
-
-📌 <b>Доступные режимы:</b>
-• 6 букв — бесплатно
-• 5 букв — только PREMIUM
-
-📌 <b>Для новичков:</b>
-• {db.get_free_requests(user_id)} бесплатных поисков в день
-• После каждого поиска кд 30 секунд
-• Запросы обновляются каждые 2 дня (+3)
-• <b>Запрос не тратится, если ник не найден!</b>
-
-💎 <b>Премиум:</b>
-• Безлимитные поиски
-• Доступ к 5-буквенным никам
-
-<i>Разработчик: @gawuzu</i>
-"""
+    is_dev = db.is_developer(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    
+    text = lang_text["welcome"].format(
+        name=first_name,
+        requests=db.get_free_requests(user_id)
+    )
     
     if is_dev:
         text += "\n\n👑 <b>Вы вошли как разработчик!</b>"
     
     await message.answer(text, reply_markup=kb.main_menu(is_dev), parse_mode="HTML")
+
+# ═══════════════════════════════════════════════════════════════════
+# ВЫБОР ЯЗЫКА
+# ═══════════════════════════════════════════════════════════════════
+
+@dp.callback_query(F.data == "menu_language")
+async def menu_language(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    
+    await callback.message.edit_text(
+        LANGUAGES["ru"]["choose_language"],
+        reply_markup=kb.language_menu(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("lang_"))
+async def set_language(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    lang = callback.data.split("_")[1]
+    
+    db.set_language(user_id, lang)
+    lang_manager.set_lang(user_id, lang)
+    
+    is_dev = db.is_developer(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    
+    text = lang_text["welcome"].format(
+        name=db.get_user(user_id).get("first_name", "User"),
+        requests=db.get_free_requests(user_id)
+    )
+    
+    if is_dev:
+        text += "\n\n👑 <b>Вы вошли как разработчик!</b>"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=kb.main_menu(is_dev),
+        parse_mode="HTML"
+    )
+    await callback.answer(f"✅ Язык изменён на {LANGUAGES[lang]['name']}")
 
 # ═══════════════════════════════════════════════════════════════════
 # ГЛАВНОЕ МЕНЮ
@@ -826,6 +1127,8 @@ async def cmd_start(message: Message, command: CommandObject):
 async def menu_back(callback: CallbackQuery):
     user_id = callback.from_user.id
     is_dev = db.is_developer(user_id)
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     text = "👻 <b>GHOST — главное меню</b>\n\nВыберите раздел:"
     if is_dev:
@@ -845,13 +1148,15 @@ async def menu_back(callback: CallbackQuery):
 @dp.callback_query(F.data == "menu_dev")
 async def menu_dev(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        "👑 <b>Панель разработчика</b>\n\nВыберите раздел:",
+        lang_text["dev_panel"],
         reply_markup=kb.dev_menu(),
         parse_mode="HTML"
     )
@@ -860,6 +1165,8 @@ async def menu_dev(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_stats")
 async def dev_stats(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -869,16 +1176,12 @@ async def dev_stats(callback: CallbackQuery):
     total_searches = db.get_total_searches()
     premium_count = db.get_premium_count()
     
-    text = f"""
-📊 <b>Статистика бота</b>
-
-👥 Пользователи: {total_users}
-🔍 Всего поисков: {total_searches}
-💎 Премиум: {premium_count}
-"""
-    
     await callback.message.edit_text(
-        text,
+        lang_text["dev_stats"].format(
+            users=total_users,
+            searches=total_searches,
+            premium=premium_count
+        ),
         reply_markup=kb.dev_menu(),
         parse_mode="HTML"
     )
@@ -887,14 +1190,15 @@ async def dev_stats(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_users")
 async def dev_users(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     users = db.get_all_users()
-    text = f"👥 Список пользователей\n\nВсего: {len(users)}\n\n"
-    
+    text = ""
     for i, uid in enumerate(users[:20], 1):
         user = db.get_user(uid)
         username = user.get("username", f"user{uid}")
@@ -906,7 +1210,10 @@ async def dev_users(callback: CallbackQuery):
         text += f"\n... и еще {len(users) - 20}"
     
     await callback.message.edit_text(
-        text,
+        lang_text["dev_users"].format(
+            total=len(users),
+            users=text
+        ),
         reply_markup=kb.dev_menu(),
         parse_mode="HTML"
     )
@@ -915,13 +1222,15 @@ async def dev_users(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_broadcast")
 async def dev_broadcast(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        "📢 Рассылка\n\nОтправьте сообщение для рассылки:",
+        lang_text["dev_broadcast"],
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -933,6 +1242,8 @@ async def dev_broadcast(callback: CallbackQuery, state: FSMContext):
 @dp.message(DevStates.waiting_for_broadcast)
 async def process_broadcast(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -971,13 +1282,15 @@ async def process_broadcast(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "dev_promos")
 async def dev_promos_menu(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        "🎁 Управление промокодами",
+        lang_text["dev_promos"],
         reply_markup=kb.dev_promos_menu(),
         parse_mode="HTML"
     )
@@ -986,13 +1299,15 @@ async def dev_promos_menu(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_promo_create")
 async def dev_promo_create(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        "🎁 Создать промокод\n\nВведите код (буквы и цифры):",
+        lang_text["dev_promo_create"],
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
@@ -1004,9 +1319,31 @@ async def dev_promo_create(callback: CallbackQuery, state: FSMContext):
 @dp.message(DevStates.waiting_for_promo_code)
 async def dev_promo_code_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    delete_mode = data.get("delete_mode", False)
+    
+    if delete_mode:
+        code = message.text.strip().upper()
+        if db.delete_promo(code):
+            await message.answer(
+                lang_text["promo_deleted"].format(code=code),
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                lang_text["promo_not_found"].format(code=code),
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
         await state.clear()
         return
     
@@ -1022,6 +1359,8 @@ async def dev_promo_code_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_promo_days)
 async def dev_promo_days_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1043,6 +1382,8 @@ async def dev_promo_days_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_promo_limit)
 async def dev_promo_limit_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1063,7 +1404,11 @@ async def dev_promo_limit_input(message: Message, state: FSMContext):
     
     if db.create_promo(code, days, limit, user_id):
         await message.answer(
-            f"✅ Промокод создан!\n\n📌 Код: <code>{code}</code>\n📅 {days} дней\n👥 Лимит: {limit}",
+            lang_text["promo_created"].format(
+                code=code,
+                days=days,
+                limit=limit
+            ),
             parse_mode="HTML",
             reply_markup=kb.dev_promos_menu()
         )
@@ -1078,6 +1423,8 @@ async def dev_promo_limit_input(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "dev_promo_list")
 async def dev_promo_list(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
@@ -1095,7 +1442,6 @@ async def dev_promo_list(callback: CallbackQuery):
         return
     
     text = "📋 Список промокодов\n\n"
-    
     for promo in promos[:20]:
         status = "✅" if promo["expires_at"] > int(time.time()) else "❌"
         text += f"{status} <code>{promo['code']}</code>\n"
@@ -1112,13 +1458,15 @@ async def dev_promo_list(callback: CallbackQuery):
 @dp.callback_query(F.data == "dev_promo_delete")
 async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        "❌ Удалить промокод\n\nВведите код:",
+        lang_text["dev_promo_delete"],
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
@@ -1128,37 +1476,6 @@ async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
     await state.update_data(delete_mode=True)
     await callback.answer()
 
-@dp.message(DevStates.waiting_for_promo_code)
-async def dev_promo_delete_input(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    if not db.is_developer(user_id):
-        await message.answer("⛔ Доступ запрещен")
-        await state.clear()
-        return
-    
-    data = await state.get_data()
-    delete_mode = data.get("delete_mode", False)
-    
-    if delete_mode:
-        code = message.text.strip().upper()
-        
-        if db.delete_promo(code):
-            await message.answer(
-                f"✅ Промокод {code} удален!",
-                reply_markup=kb.dev_promos_menu(),
-                parse_mode="HTML"
-            )
-        else:
-            await message.answer(
-                f"❌ Промокод {code} не найден!",
-                reply_markup=kb.dev_promos_menu(),
-                parse_mode="HTML"
-            )
-        
-        await state.clear()
-        return
-
 # ═══════════════════════════════════════════════════════════════════
 # ВЫДАТЬ ПРЕМИУМ/ЗАПРОСЫ
 # ═══════════════════════════════════════════════════════════════════
@@ -1166,13 +1483,15 @@ async def dev_promo_delete_input(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "dev_give_premium")
 async def dev_give_premium(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        "💎 Выдать премиум\n\nВведите ID пользователя:",
+        lang_text["dev_give_premium"],
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -1185,13 +1504,15 @@ async def dev_give_premium(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data == "dev_give_requests")
 async def dev_give_requests(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await callback.answer("⛔ Доступ запрещен", show_alert=True)
         return
     
     await callback.message.edit_text(
-        "📦 Выдать запросы\n\nВведите ID пользователя:",
+        lang_text["dev_give_requests"],
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -1204,6 +1525,8 @@ async def dev_give_requests(callback: CallbackQuery, state: FSMContext):
 @dp.message(DevStates.waiting_for_user_id)
 async def dev_user_id_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1229,6 +1552,8 @@ async def dev_user_id_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_days)
 async def dev_premium_days_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1247,15 +1572,15 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     target_id = data.get("target_id")
     
     new_until = db.add_premium(target_id, days)
-    
     target_user = db.get_user(target_id)
     username = target_user.get("username", f"user{target_id}")
     
     await message.answer(
-        f"✅ <b>Премиум выдан!</b>\n\n"
-        f"👤 @{username}\n"
-        f"📅 {days} дней\n"
-        f"🕐 До: {datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')}",
+        lang_text["premium_given"].format(
+            username=username,
+            days=days,
+            until=datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')
+        ),
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1274,6 +1599,8 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
 @dp.message(DevStates.waiting_for_count)
 async def dev_requests_count_input(message: Message, state: FSMContext):
     user_id = message.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if not db.is_developer(user_id):
         await message.answer("⛔ Доступ запрещен")
@@ -1292,12 +1619,14 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     target_id = data.get("target_id")
     
     db.add_free_requests(target_id, count)
-    
     target_user = db.get_user(target_id)
     username = target_user.get("username", f"user{target_id}")
     
     await message.answer(
-        f"✅ Запросы выданы!\n\n👤 @{username}\n📊 +{count} запросов",
+        lang_text["requests_given"].format(
+            username=username,
+            count=count
+        ),
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1320,6 +1649,8 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "menu_search")
 async def menu_search(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     banned, reason = db.is_banned(user_id)
     if banned:
@@ -1329,26 +1660,10 @@ async def menu_search(callback: CallbackQuery):
     is_premium = db.is_premium(user_id)
     free_requests = db.get_free_requests(user_id)
     
-    text = f"""
-🔍 <b>ПОИСК ЮЗЕРНЕЙМА</b>
-
-✅ Двойная проверка:
-  • Telegram API — не занят профилем
-  • Web-страница — не на аукционе Fragment
-
-📌 <b>Доступные режимы:</b>
-  • 6 букв — бесплатно
-  • 5 букв — только PREMIUM
-
-📊 Осталось попыток: {free_requests if not is_premium else '♾️'}
-🎯 Поиск за 15 попыток
-💡 Запрос не тратится, если ник не найден!
-
-<b>Выберите режим:</b>
-"""
-    
     await callback.message.edit_text(
-        text,
+        lang_text["search_desc"].format(
+            requests=free_requests if not is_premium else '♾️'
+        ),
         reply_markup=kb.search_menu(is_premium),
         parse_mode="HTML"
     )
@@ -1357,6 +1672,8 @@ async def menu_search(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("search_"))
 async def start_search(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     banned, reason = db.is_banned(user_id)
     if banned:
@@ -1394,17 +1711,17 @@ async def start_search(callback: CallbackQuery):
     db.update_last_search(user_id)
     
     search_msg = await callback.message.edit_text(
-        "🔍 <b>Поиск свободного юзернейма...</b>\n\n"
-        f"📏 Длина: {length} символов\n"
-        f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-        f"⏳ 0/15\n\n"
-        f"<i>Начинаю поиск...</i>",
+        lang_text["searching"].format(
+            length=length,
+            digits="Да" if with_digits else "Нет",
+            max=MAX_SEARCH_ATTEMPTS
+        ),
         parse_mode="HTML"
     )
     
     generator = NickGenerator(bot)
     nick, attempts, checked = await generator.search_free(
-        length, with_digits, message=search_msg
+        length, with_digits, message=search_msg, lang=lang
     )
     
     if nick:
@@ -1418,29 +1735,24 @@ async def start_search(callback: CallbackQuery):
         
         img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
         
-        text = f"""
-✅ <b>Найден свободный ник!</b>
-
-👤 <b>Юзернейм:</b> @{nick}
-📏 <b>Длина:</b> {length} символов
-{'🔢 С цифрами' if with_digits else '🔤 Только буквы'}
-⭐ <b>Рейтинг:</b> {rating}/10
-💰 <b>Ценность:</b> ${price_usd}
-🎯 <b>Найден за:</b> {attempts} попыток
-"""
-        
         await callback.message.answer_photo(
             photo=BufferedInputFile(img_buffer.getvalue(), filename="nick.png"),
-            caption=text,
+            caption=lang_text["found"].format(
+                nick=nick,
+                length=length,
+                with_digits="🔢 С цифрами\n" if with_digits else "🔤 Только буквы\n",
+                rating=rating,
+                price=price_usd,
+                attempts=attempts
+            ),
             reply_markup=kb.result_menu(nick),
             parse_mode="HTML"
         )
     else:
         await search_msg.edit_text(
-            "❌ <b>Свободный ник не найден</b>\n\n"
-            f"⏳ Попыток: 15/15\n"
-            f"📋 Проверено: {len(checked)} ников\n\n"
-            "💡 <b>Запрос не был потрачен!</b>",
+            lang_text["not_found"].format(
+                checked=len(checked)
+            ),
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="menu_search")],
@@ -1460,12 +1772,15 @@ async def search_skip(callback: CallbackQuery):
 
 @dp.callback_query(F.data.startswith("copy_"))
 async def copy_username(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    
     nick = callback.data.split("_")[1]
     
     await callback.answer(f"✅ @{nick} скопирован!", show_alert=True)
-    
     await callback.message.answer(
-        f"📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
+        lang_text["copy"].format(nick=nick),
         parse_mode="HTML"
     )
 
@@ -1476,29 +1791,19 @@ async def copy_username(callback: CallbackQuery):
 @dp.callback_query(F.data == "menu_premium")
 async def menu_premium(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     is_premium = db.is_premium(user_id)
     
-    text = """
-💎 <b>ПРЕМИУМ ПОДПИСКА</b>
-
-<b>ФУНКЦИИ:</b>
-• Безлимитный поиск
-• Доступ к 5-буквенным никам
-
-<b>ЦЕНЫ:</b>
-1 день — 65⭐
-3 дня — 150⭐
-10 дней — 400⭐
-30 дней — 800⭐
-"""
+    text = lang_text["premium"]
     
     if is_premium:
         remaining = db.get_premium_remaining(user_id)
         days = remaining // 86400
         hours = (remaining % 86400) // 3600
-        text += f"\n✅ Активен: {days}д {hours}ч"
+        text += lang_text["premium_active"].format(days=days, hours=hours)
     else:
-        text += "\n❌ Не активен"
+        text += lang_text["premium_inactive"]
     
     await callback.message.edit_text(
         text,
@@ -1510,6 +1815,8 @@ async def menu_premium(callback: CallbackQuery):
 @dp.callback_query(F.data.startswith("premium_"))
 async def buy_premium(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     if callback.data == "premium_promo":
         await callback.message.edit_text(
@@ -1605,45 +1912,35 @@ async def handle_promo(message: Message, state: FSMContext):
 @dp.callback_query(F.data == "menu_profile")
 async def menu_profile(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    
     user = db.get_user(user_id)
     is_premium = db.is_premium(user_id)
     found = db.get_found_usernames(user_id, 5)
     is_dev = db.is_developer(user_id)
     
-    text = f"""
-👤 <b>Профиль</b>
-
-📌 ID: {user_id}
-📌 Имя: {user.get('first_name', 'Не указано')}
-📌 Юзернейм: @{user.get('username', 'Не указан')}
-
-📊 <b>Статистика:</b>
-• Найдено: {user.get('total_searches', 0)}
-• Запросов: {db.get_free_requests(user_id)}/{MAX_FREE_REQUESTS}
-
-📋 <b>Последние найденные:</b>
-"""
-    
+    nicks_text = ""
     if found:
         for item in found[:5]:
             dt = datetime.fromtimestamp(item["found_at"]).strftime("%d.%m %H:%M")
-            text += f"  • @{item['username']} — {dt}\n"
+            nicks_text += f"  • @{item['username']} — {dt}\n"
     else:
-        text += "  • Пока нет\n"
+        nicks_text += "  • Пока нет\n"
     
-    if is_premium:
-        remaining = db.get_premium_remaining(user_id)
-        days = remaining // 86400
-        hours = (remaining % 86400) // 3600
-        text += f"\n💎 Премиум: ✅ ({days}д {hours}ч)"
-    else:
-        text += "\n💎 Премиум: ❌"
-    
-    if is_dev:
-        text += "\n👑 Разработчик"
+    premium_status = "✅" if is_premium else "❌"
     
     await callback.message.edit_text(
-        text,
+        lang_text["profile"].format(
+            id=user_id,
+            name=user.get('first_name', 'Не указано'),
+            username=user.get('username', 'Не указан'),
+            found=user.get('total_searches', 0),
+            requests=db.get_free_requests(user_id),
+            max=MAX_FREE_REQUESTS,
+            nicks=nicks_text,
+            premium=premium_status
+        ),
         reply_markup=kb.profile_menu(),
         parse_mode="HTML"
     )
@@ -1652,6 +1949,9 @@ async def menu_profile(callback: CallbackQuery):
 @dp.callback_query(F.data == "profile_found")
 async def profile_found(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    
     found = db.get_found_usernames(user_id, 20)
     
     if not found:
@@ -1664,7 +1964,6 @@ async def profile_found(callback: CallbackQuery):
         return
     
     text = "📊 <b>Найденные ники</b>\n\n"
-    
     for i, item in enumerate(reversed(found[:20]), 1):
         dt = datetime.fromtimestamp(item["found_at"]).strftime("%d.%m %H:%M")
         text += f"{i}. @{item['username']} — {dt}\n"
@@ -1686,24 +1985,14 @@ async def profile_found(callback: CallbackQuery):
 @dp.callback_query(F.data == "menu_referrals")
 async def menu_referrals(callback: CallbackQuery):
     user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
+    
     code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
     link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
-    text = f"""
-👥 <b>Рефералы</b>
-
-🔗 <b>Ссылка:</b>
-<code>{link}</code>
-
-<b>Награды:</b>
-• 7 → 1 день
-• 14 → 3 дня
-• 25 → 10 дней
-• 50 → 25 дней
-"""
-    
     await callback.message.edit_text(
-        text,
+        lang_text["referral"].format(link=link),
         reply_markup=kb.referral_menu(),
         parse_mode="HTML"
     )
@@ -1712,6 +2001,7 @@ async def menu_referrals(callback: CallbackQuery):
 @dp.callback_query(F.data == "referral_link")
 async def referral_link(callback: CallbackQuery):
     user_id = callback.from_user.id
+    
     code = hashlib.md5(str(user_id).encode()).hexdigest()[:8]
     link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
@@ -1727,19 +2017,12 @@ async def referral_link(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "menu_info")
 async def menu_info(callback: CallbackQuery):
-    text = """
-ℹ️ <b>GHOST - Поиск Ников</b>
-
-• Находит свободные ники 5-6 букв
-• Двойная проверка: API + Web
-• 15 попыток с прогрессом
-• Рейтинг и цена в $
-• Запрос не тратится если ник не найден
-• Оплата: Telegram Stars
-"""
+    user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     await callback.message.edit_text(
-        text,
+        lang_text["info"],
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_back")]
         ]),
@@ -1753,14 +2036,12 @@ async def menu_info(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "menu_help")
 async def menu_help(callback: CallbackQuery):
-    text = """
-🆘 <b>Поддержка</b>
-
-Разработчик: @gawuzu
-"""
+    user_id = callback.from_user.id
+    lang = db.get_language(user_id)
+    lang_text = LANGUAGES.get(lang, LANGUAGES["ru"])
     
     await callback.message.edit_text(
-        text,
+        lang_text["help"],
         reply_markup=kb.help_menu(),
         parse_mode="HTML"
     )
@@ -1812,8 +2093,8 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
+    logger.info("✅ Мультиязычный (6 языков)")
     logger.info("✅ Двойная проверка: API + Web")
-    logger.info("✅ Проверка Fragment")
     logger.info("✅ База данных сохраняется")
     
     try:

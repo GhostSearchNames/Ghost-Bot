@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 36.0 - ПОЛНОСТЬЮ РАБОЧАЯ
+Версия: 37.0 - КРАСИВЫЕ НИКИ + ТОЧНАЯ ПРОВЕРКА
 """
 
 import asyncio
@@ -409,41 +409,90 @@ class NickGenerator:
         self.bot = bot
         self.checked_cache = set()
     
-    def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует красивый ник"""
-        chars = string.ascii_lowercase
-        if with_digits:
-            chars += string.digits
+    def _generate_nickname(self, length: int, with_digits: bool) -> str:
+        """Генератор ровных, красивых и читаемых юзернеймов."""
+        # Исключаем сложные и некрасивые буквы (q, x, j, w, z)
+        vowels = "aeiouy"
+        consonants = "bcdfghklmnprstv" 
+
+        username = ""
+        is_vowel = random.choice([True, False])
         
-        nick = random.choice(string.ascii_lowercase)
-        for _ in range(length - 1):
-            nick += random.choice(chars)
-        return nick
+        for _ in range(length):
+            if is_vowel:
+                username += random.choice(vowels)
+            else:
+                username += random.choice(consonants)
+            is_vowel = not is_vowel
+
+        username = username.replace("vv", "v")
+        
+        while len(username) < length:
+            username += random.choice(vowels)
+
+        if with_digits:
+            cool_digits = "70159"
+            username = username[:-1] + random.choice(cool_digits)
+
+        return username
+    
+    async def _check_web(self, username: str) -> bool:
+        """
+        Ультимативная проверка через веб-виджет Telegram.
+        Этот метод видит скрытые каналы, приватные юзы и Fragment.
+        """
+        url = f"https://t.me/{username}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=5) as response:
+                    if response.status == 200:
+                        html_text = await response.text()
+                        
+                        if "tgme_channel_info" in html_text or "tgme_page_title" in html_text:
+                            return False
+                            
+                        if "fragment.com" in html_text.lower() or "auction" in html_text.lower():
+                            return False
+                        
+                        if "tgme_page_extra" in html_text or "View in Telegram" in html_text:
+                            return False
+                        
+                        return True
+                    
+                    elif response.status == 404:
+                        return True
+        except Exception as e:
+            logger.error(f"Ошибка веб-проверки @{username}: {e}")
+            return False
+        return False
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК - ПРАВИЛЬНАЯ ЛОГИКА"""
+        """Проверка через API + Web"""
         try:
-            # Пытаемся получить чат
             await self.bot.get_chat(f"@{nick}")
-            # Если получили - ник занят
-            logger.info(f"❌ @{nick} - ЗАНЯТ")
+            logger.info(f"❌ @{nick} - ЗАНЯТ (API)")
             return False
         except TelegramBadRequest as e:
-            error = str(e).lower()
-            # Если ошибка "chat not found" - ник свободен!
-            if "chat not found" in error or "user not found" in error:
-                logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                return True
-            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
+            if "chat not found" in str(e).lower():
+                is_free = await self._check_web(nick)
+                if is_free:
+                    logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                    return True
+                else:
+                    logger.info(f"❌ @{nick} - ЗАНЯТ (Web)")
+                    return False
             return False
         except Exception as e:
-            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
+            logger.info(f"⚠️ @{nick} - Ошибка: {e}")
             return False
     
-    async def search_free(self, length: int, with_digits: bool = False, 
-                          message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник"""
-        MAX_ATTEMPTS = 15
+    async def search_free(self, length: int, with_digits: bool, 
+                          message: Message) -> Tuple[Optional[str], int, List[str]]:
+        """Основной цикл поиска"""
+        max_attempts = 15
         attempts = 0
         checked = []
         found = None
@@ -454,14 +503,14 @@ class NickGenerator:
                 f"🔍 <b>Поиск свободного ника...</b>\n\n"
                 f"📏 Длина: {length} символов\n"
                 f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-                f"⏳ 0/{MAX_ATTEMPTS}\n\n"
+                f"⏳ 0/{max_attempts}\n\n"
                 f"<i>Начинаю поиск...</i>",
                 parse_mode="HTML"
             )
         
-        while attempts < MAX_ATTEMPTS:
+        while attempts < max_attempts:
             attempts += 1
-            nick = self.generate_nick(length, with_digits)
+            nick = self._generate_nickname(length, with_digits)
             
             if nick in self.checked_cache:
                 continue
@@ -474,14 +523,14 @@ class NickGenerator:
                     f"🔍 <b>Поиск свободного ника...</b>\n\n"
                     f"📏 Длина: {length} символов\n"
                     f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-                    f"⏳ <b>{attempts}/{MAX_ATTEMPTS}</b>\n\n"
+                    f"⏳ <b>{attempts}/{max_attempts}</b>\n\n"
                     f"🔎 Проверяю: <code>@{nick}</code>\n"
                     f"📋 Проверено: {len(checked)} ников\n\n"
                     f"<i>Ищу свободный ник...</i>"
                 )
                 await message.edit_text(progress_text, parse_mode="HTML")
             
-            logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
+            logger.info(f"🔄 Попытка {attempts}/{max_attempts}: @{nick}")
             
             is_available = await self.check_available(nick)
             
@@ -492,18 +541,18 @@ class NickGenerator:
                     await message.edit_text(
                         f"🎉 <b>НАЙДЕН СВОБОДНЫЙ НИК!</b>\n\n"
                         f"👤 <code>@{nick}</code>\n"
-                        f"🎯 Найден на попытке {attempts}/{MAX_ATTEMPTS}\n"
+                        f"🎯 Найден на попытке {attempts}/{max_attempts}\n"
                         f"📋 Проверено: {len(checked)} ников",
                         parse_mode="HTML"
                     )
                 break
             
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(1.2)
         
         if not found and message:
             await message.edit_text(
                 f"❌ <b>Свободный ник не найден</b>\n\n"
-                f"⏳ Попыток: {MAX_ATTEMPTS}/{MAX_ATTEMPTS}\n"
+                f"⏳ Попыток: {max_attempts}/{max_attempts}\n"
                 f"📋 Проверено: {len(checked)} ников\n\n"
                 f"💡 Запрос не потрачен! Попробуйте другой режим.",
                 parse_mode="HTML"
@@ -512,18 +561,12 @@ class NickGenerator:
         return found, found_attempt, checked
     
     def calculate_rating(self, nick: str) -> int:
+        """Рейтинг крутизны никнейма"""
         rating = 5
         if len(nick) == 5:
             rating += 1
-        elif len(nick) == 6:
-            rating += 0.5
-        if len(set(nick)) / len(nick) > 0.7:
-            rating += 1
-        elif len(set(nick)) / len(nick) > 0.5:
-            rating += 0.5
-        vowels = sum(1 for c in nick if c in 'aeiouy')
-        if 0.2 < vowels / len(nick) < 0.8:
-            rating += 1
+        if nick[-1].isdigit():
+            rating -= 0.5
         return min(10, max(1, round(rating)))
 
 # ═══════════════════════════════════════════════════════════════════
@@ -711,7 +754,7 @@ async def cmd_start(message: Message, command: CommandObject):
 
 🎯 <b>Что здесь можно делать?</b>
 • Находить свободные Telegram-ни́ки
-• Проверка через Telegram API (15 попыток)
+• Проверка через Telegram API + Web
 • Получать рейтинг и стоимость ника
 
 📌 <b>Доступные режимы:</b>
@@ -772,7 +815,8 @@ async def menu_search(callback: CallbackQuery):
 🔍 <b>ПОИСК ЮЗЕРНЕЙМА</b>
 
 ✅ Каждый найденный ник проходит проверку:
-  • Telegram — не занят профилем, каналом или ботом
+  • Telegram API — не занят
+  • Web-проверка — не на аукционе
 
 📌 <b>Доступные режимы:</b>
   • 6 букв — бесплатно
@@ -842,7 +886,7 @@ async def start_search(callback: CallbackQuery):
     
     generator = NickGenerator(bot)
     nick, attempts, checked = await generator.search_free(
-        length, with_digits, message=search_msg
+        length, with_digits, search_msg
     )
     
     if nick:
@@ -852,7 +896,7 @@ async def start_search(callback: CallbackQuery):
         db.add_found_username(user_id, nick)
         
         rating = generator.calculate_rating(nick)
-        price_usd = random.randint(7, 11)
+        price_usd = rating * random.randint(2, 10)
         
         img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
         
@@ -1172,7 +1216,7 @@ async def menu_info(callback: CallbackQuery):
 ℹ️ <b>GHOST - Поиск Ников</b>
 
 • Находит свободные ники 5-6 букв
-• Проверка через Telegram API
+• Двойная проверка: API + Web
 • 15 попыток с прогрессом
 • Рейтинг и цена в $
 • Запрос не тратится если ник не найден

@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 19.0 - БЫСТРЫЙ ПОИСК + КРАСИВЫЕ НИКИ
+Версия: 20.0 - БЫСТРЫЙ ПОИСК + ЦЕНА В $
 """
 
 import asyncio
@@ -358,8 +358,7 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует КРАСИВЫЕ/РЕАЛИСТИЧНЫЕ ники (не колякмоляки)"""
-        # Популярные слоги для красивых ников
+        """Генерирует КРАСИВЫЕ/РЕАЛИСТИЧНЫЕ ники"""
         syllables = [
             'ab', 'ac', 'ad', 'ag', 'al', 'an', 'ar', 'as', 'at', 'av',
             'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
@@ -375,11 +374,8 @@ class NickGenerator:
             'wa', 'we', 'wi', 'wo', 'wu', 'ya', 'ye', 'yi', 'yo', 'yu',
             'za', 'ze', 'zi', 'zo', 'zu'
         ]
-        
-        # Красивые буквы (часто используются в никах)
         pretty_letters = 'aeioulnrst'
         
-        # Собираем ник из слогов
         nick = ""
         while len(nick) < length:
             syllable = random.choice(syllables)
@@ -388,12 +384,9 @@ class NickGenerator:
                 break
         
         nick = nick[:length]
-        
-        # Если короткий - добиваем красивыми буквами
         while len(nick) < length:
             nick += random.choice(pretty_letters)
         
-        # Добавляем цифры если нужно (в конце)
         if with_digits:
             for _ in range(random.randint(1, 2)):
                 if len(nick) < length:
@@ -402,7 +395,6 @@ class NickGenerator:
                     break
             nick = nick[:length]
         
-        # Если всё ещё короткий - добиваем
         while len(nick) < length:
             nick += random.choice(pretty_letters)
         
@@ -428,6 +420,7 @@ class NickGenerator:
         attempts = 0
         checked = []
         found = None
+        found_attempt = 0
         
         if message:
             await message.edit_text(
@@ -468,6 +461,7 @@ class NickGenerator:
             # ЕСЛИ НАШЛИ - СРАЗУ ВЫХОДИМ!
             if is_available:
                 found = nick
+                found_attempt = attempts
                 if message:
                     await message.edit_text(
                         f"🎉 <b>НАЙДЕН СВОБОДНЫЙ НИК!</b>\n\n"
@@ -478,7 +472,7 @@ class NickGenerator:
                     )
                 break  # ВЫХОДИМ ИЗ ЦИКЛА!
             
-            # Задержка 1.5 секунды (оптимально)
+            # Задержка 1.5 секунды
             await asyncio.sleep(1.5)
         
         if not found and message:
@@ -490,31 +484,27 @@ class NickGenerator:
                 parse_mode="HTML"
             )
         
-        return found, attempts, checked
+        return found, found_attempt, checked
     
     def calculate_rating(self, nick: str) -> int:
         """Рейтинг ника (1-10)"""
         rating = 5
         
-        # Длина 5 или 6 - бонус
         if len(nick) == 5:
             rating += 1
         elif len(nick) == 6:
             rating += 0.5
         
-        # Уникальные буквы
         unique_ratio = len(set(nick)) / len(nick)
         if unique_ratio > 0.7:
             rating += 1
         elif unique_ratio > 0.5:
             rating += 0.5
         
-        # Соотношение гласных/согласных
         vowels = sum(1 for c in nick if c in 'aeiouy')
         if 0.2 < vowels / len(nick) < 0.8:
             rating += 1
         
-        # Красивые буквы
         pretty = 'aeioulnrst'
         if sum(1 for c in nick if c in pretty) / len(nick) > 0.5:
             rating += 0.5
@@ -522,7 +512,7 @@ class NickGenerator:
         return min(10, max(1, round(rating)))
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР КАРТИНОК
+# ГЕНЕРАТОР КАРТИНОК (С ЦЕНОЙ В ДОЛЛАРАХ)
 # ═══════════════════════════════════════════════════════════════════
 
 class ImageGenerator:
@@ -551,15 +541,17 @@ class ImageGenerator:
             self.fonts["medium"] = ImageFont.load_default()
             self.fonts["small"] = ImageFont.load_default()
     
-    def generate_card(self, nick: str, rating: int, price: int, attempts: int) -> BytesIO:
+    def generate_card(self, nick: str, rating: int, price_usd: int, attempts: int) -> BytesIO:
         width, height = 500, 450
         image = Image.new('RGB', (width, height), color=(10, 10, 25))
         draw = ImageDraw.Draw(image)
         
+        # Градиент
         for i in range(height):
             color_value = int(10 + (i / height) * 20)
             draw.rectangle([(0, i), (width, i + 1)], fill=(color_value, color_value, color_value + 5))
         
+        # Рамка
         for i in range(3):
             offset = i * 3
             draw.rectangle(
@@ -568,16 +560,28 @@ class ImageGenerator:
                 width=2
             )
         
+        # Заголовок
         draw.text((width // 2, 30), "👻 НАЙДЕН НИК!", font=self.fonts["medium"], fill=(255,255,255), anchor="mm")
+        
+        # Проверки
         draw.text((width // 2, 80), "✅ Telegram — свободен", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
         draw.text((width // 2, 110), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
+        
+        # Ник
         draw.text((width // 2, 180), f"@{nick}", font=self.fonts["large"], fill=(0,255,200), anchor="mm")
         
+        # Рейтинг (звёзды)
         stars = "⭐" * rating + "☆" * (10 - rating)
         draw.text((width // 2, 270), f"Рейтинг: {rating}/10", font=self.fonts["medium"], fill=(255,215,0), anchor="mm")
         draw.text((width // 2, 305), stars, font=self.fonts["small"], fill=(255,215,0), anchor="mm")
-        draw.text((width // 2, 340), f"💰 Примерная стоимость: {price} ⭐", font=self.fonts["small"], fill=(0,200,255), anchor="mm")
-        draw.text((width // 2, 375), f"🎯 Найден за {attempts} попыток", font=self.fonts["small"], fill=(150,150,150), anchor="mm")
+        
+        # ЦЕНА В ДОЛЛАРАХ
+        draw.text((width // 2, 340), f"💰 Ценность: ${price_usd}", font=self.fonts["medium"], fill=(0,255,100), anchor="mm")
+        
+        # Попытка
+        draw.text((width // 2, 385), f"🎯 Найден за {attempts} попыток", font=self.fonts["small"], fill=(150,150,150), anchor="mm")
+        
+        # Футер
         draw.text((width // 2, height - 25), "👻 Ghost - Ники | @gawuzu", font=self.fonts["small"], fill=(80,80,80), anchor="mm")
         
         image_buffer = BytesIO()
@@ -775,7 +779,7 @@ async def menu_back(callback: CallbackQuery):
     await callback.answer()
 
 # ═══════════════════════════════════════════════════════════════════
-# МЕНЮ РАЗРАБОТЧИКА
+# МЕНЮ РАЗРАБОТЧИКА (ВСЁ РАБОТАЕТ)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_dev")
@@ -808,9 +812,9 @@ async def dev_stats(callback: CallbackQuery):
     text = f"""
 📊 <b>Статистика бота</b>
 
-👥 <b>Пользователи:</b> {total_users}
-🔍 <b>Всего поисков:</b> {total_searches}
-💎 <b>Премиум:</b> {premium_count}
+👥 Пользователи: {total_users}
+🔍 Всего поисков: {total_searches}
+💎 Премиум: {premium_count}
 """
     
     await callback.message.edit_text(
@@ -829,7 +833,7 @@ async def dev_users(callback: CallbackQuery):
         return
     
     users = db.get_all_users()
-    text = f"👥 <b>Список пользователей</b>\n\nВсего: {len(users)}\n\n"
+    text = f"👥 Список пользователей\n\nВсего: {len(users)}\n\n"
     
     for i, uid in enumerate(users[:20], 1):
         user = db.get_user(uid)
@@ -839,7 +843,7 @@ async def dev_users(callback: CallbackQuery):
         text += f"{i}. @{username} {is_prem} {is_dev}\n"
     
     if len(users) > 20:
-        text += f"\n... и еще {len(users) - 20} пользователей"
+        text += f"\n... и еще {len(users) - 20}"
     
     await callback.message.edit_text(
         text,
@@ -857,8 +861,7 @@ async def dev_broadcast(callback: CallbackQuery, state: FSMContext):
         return
     
     await callback.message.edit_text(
-        "📢 <b>Рассылка</b>\n\n"
-        "Отправьте сообщение для рассылки всем пользователям:",
+        "📢 Рассылка\n\nОтправьте сообщение для рассылки:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -880,7 +883,7 @@ async def process_broadcast(message: Message, state: FSMContext):
     sent = 0
     failed = 0
     
-    status_msg = await message.answer(f"📢 Начинаю рассылку {len(users)} пользователям...")
+    status_msg = await message.answer(f"📢 Рассылка {len(users)} пользователям...")
     
     for uid in users:
         try:
@@ -888,8 +891,6 @@ async def process_broadcast(message: Message, state: FSMContext):
                 await bot.send_message(uid, message.text, parse_mode="HTML")
             elif message.photo:
                 await bot.send_photo(uid, message.photo[-1].file_id, caption=message.caption, parse_mode="HTML")
-            elif message.video:
-                await bot.send_video(uid, message.video.file_id, caption=message.caption, parse_mode="HTML")
             else:
                 await bot.send_message(uid, "📢 Рассылка от разработчика", parse_mode="HTML")
             sent += 1
@@ -898,9 +899,7 @@ async def process_broadcast(message: Message, state: FSMContext):
         await asyncio.sleep(0.1)
     
     await status_msg.edit_text(
-        f"✅ <b>Рассылка завершена!</b>\n\n"
-        f"📤 Отправлено: {sent}\n"
-        f"❌ Не доставлено: {failed}",
+        f"✅ Рассылка завершена!\n\n📤 Отправлено: {sent}\n❌ Не доставлено: {failed}",
         parse_mode="HTML"
     )
     await state.clear()
@@ -918,7 +917,7 @@ async def dev_promos_menu(callback: CallbackQuery):
         return
     
     await callback.message.edit_text(
-        "🎁 <b>Управление промокодами</b>\n\nВыберите действие:",
+        "🎁 Управление промокодами",
         reply_markup=kb.dev_promos_menu(),
         parse_mode="HTML"
     )
@@ -933,8 +932,7 @@ async def dev_promo_create(callback: CallbackQuery, state: FSMContext):
         return
     
     await callback.message.edit_text(
-        "🎁 <b>Создать промокод</b>\n\n"
-        "Введите код промокода (латиница, цифры):",
+        "🎁 Создать промокод\n\nВведите код (буквы и цифры):",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
@@ -958,7 +956,7 @@ async def dev_promo_code_input(message: Message, state: FSMContext):
         return
     
     await state.update_data(promo_code=code)
-    await message.answer("📅 Введите количество дней (1-365):")
+    await message.answer("📅 Количество дней (1-365):")
     await state.set_state(DevStates.waiting_for_promo_days)
 
 @dp.message(DevStates.waiting_for_promo_days)
@@ -979,7 +977,7 @@ async def dev_promo_days_input(message: Message, state: FSMContext):
         return
     
     await state.update_data(promo_days=days)
-    await message.answer("👥 Введите лимит использований (1-1000):")
+    await message.answer("👥 Лимит использований (1-1000):")
     await state.set_state(DevStates.waiting_for_promo_limit)
 
 @dp.message(DevStates.waiting_for_promo_limit)
@@ -1005,10 +1003,7 @@ async def dev_promo_limit_input(message: Message, state: FSMContext):
     
     if db.create_promo(code, days, limit, user_id):
         await message.answer(
-            f"✅ <b>Промокод создан!</b>\n\n"
-            f"📌 Код: <code>{code}</code>\n"
-            f"📅 Дней: {days}\n"
-            f"👥 Лимит: {limit}",
+            f"✅ Промокод создан!\n\n📌 Код: <code>{code}</code>\n📅 {days} дней\n👥 Лимит: {limit}",
             parse_mode="HTML",
             reply_markup=kb.dev_promos_menu()
         )
@@ -1032,14 +1027,14 @@ async def dev_promo_list(callback: CallbackQuery):
     
     if not promos:
         await callback.message.edit_text(
-            "📋 <b>Промокодов нет</b>",
+            "📋 Промокодов нет",
             reply_markup=kb.dev_promos_menu(),
             parse_mode="HTML"
         )
         await callback.answer()
         return
     
-    text = "📋 <b>Список промокодов</b>\n\n"
+    text = "📋 Список промокодов\n\n"
     
     for promo in promos[:20]:
         status = "✅" if promo["expires_at"] > int(time.time()) else "❌"
@@ -1063,8 +1058,7 @@ async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
         return
     
     await callback.message.edit_text(
-        "❌ <b>Удалить промокод</b>\n\n"
-        "Введите код для удаления:",
+        "❌ Удалить промокод\n\nВведите код:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
@@ -1091,13 +1085,13 @@ async def dev_promo_delete_input(message: Message, state: FSMContext):
         
         if db.delete_promo(code):
             await message.answer(
-                f"✅ <b>Промокод {code} удален!</b>",
+                f"✅ Промокод {code} удален!",
                 reply_markup=kb.dev_promos_menu(),
                 parse_mode="HTML"
             )
         else:
             await message.answer(
-                f"❌ <b>Промокод {code} не найден!</b>",
+                f"❌ Промокод {code} не найден!",
                 reply_markup=kb.dev_promos_menu(),
                 parse_mode="HTML"
             )
@@ -1118,8 +1112,7 @@ async def dev_give_premium(callback: CallbackQuery, state: FSMContext):
         return
     
     await callback.message.edit_text(
-        "💎 <b>Выдать премиум</b>\n\n"
-        "Введите ID пользователя:",
+        "💎 Выдать премиум\n\nВведите ID пользователя:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -1138,8 +1131,7 @@ async def dev_give_requests(callback: CallbackQuery, state: FSMContext):
         return
     
     await callback.message.edit_text(
-        "📦 <b>Выдать запросы</b>\n\n"
-        "Введите ID пользователя:",
+        "📦 Выдать запросы\n\nВведите ID пользователя:",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
@@ -1168,10 +1160,10 @@ async def dev_user_id_input(message: Message, state: FSMContext):
     data = await state.get_data()
     
     if data.get("action") == "premium":
-        await message.answer("📅 Введите количество дней:")
+        await message.answer("📅 Количество дней:")
         await state.set_state(DevStates.waiting_for_days)
     else:
-        await message.answer("📊 Введите количество запросов (1-100):")
+        await message.answer("📊 Количество запросов (1-100):")
         await state.set_state(DevStates.waiting_for_count)
 
 @dp.message(DevStates.waiting_for_days)
@@ -1200,9 +1192,7 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     username = target_user.get("username", f"user{target_id}")
     
     await message.answer(
-        f"✅ <b>Премиум выдан!</b>\n\n"
-        f"👤 @{username}\n"
-        f"📅 {days} дней",
+        f"✅ Премиум выдан!\n\n👤 @{username}\n📅 {days} дней",
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1210,8 +1200,7 @@ async def dev_premium_days_input(message: Message, state: FSMContext):
     try:
         await bot.send_message(
             target_id,
-            f"🎉 <b>Вам выдан премиум!</b>\n\n"
-            f"📅 {days} дней",
+            f"🎉 Вам выдан премиум!\n📅 {days} дней",
             parse_mode="HTML"
         )
     except:
@@ -1245,9 +1234,7 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     username = target_user.get("username", f"user{target_id}")
     
     await message.answer(
-        f"✅ <b>Запросы выданы!</b>\n\n"
-        f"👤 @{username}\n"
-        f"📊 +{count} запросов",
+        f"✅ Запросы выданы!\n\n👤 @{username}\n📊 +{count} запросов",
         parse_mode="HTML",
         reply_markup=kb.dev_menu()
     )
@@ -1255,8 +1242,7 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     try:
         await bot.send_message(
             target_id,
-            f"🎉 <b>Вам выданы запросы!</b>\n\n"
-            f"📊 +{count} запросов",
+            f"🎉 Вам выданы запросы!\n📊 +{count}",
             parse_mode="HTML"
         )
     except:
@@ -1265,7 +1251,7 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК
+# ПОИСК (ОСТАНАВЛИВАЕТСЯ НА ПЕРВОМ СВОБОДНОМ)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
@@ -1290,9 +1276,9 @@ async def menu_search(callback: CallbackQuery):
   • 6 букв — бесплатно
   • 5 букв — только PREMIUM
 
-📊 Осталось попыток сегодня: {free_requests if not is_premium else '♾️'}
-🎯 Поиск выполняется за 15 попыток
-💡 <b>Запрос не тратится, если ник не найден!</b>
+📊 Осталось попыток: {free_requests if not is_premium else '♾️'}
+🎯 Поиск за 15 попыток
+💡 Запрос не тратится, если ник не найден!
 
 <b>Выберите режим:</b>
 """
@@ -1321,8 +1307,7 @@ async def start_search(callback: CallbackQuery):
         is_premium = db.is_premium(user_id)
         if not is_premium:
             await callback.answer(
-                "🔒 5-буквенные ники доступны только с премиум!\n"
-                "Купите премиум 💎",
+                "🔒 5-буквенные ники только с премиум! 💎",
                 show_alert=True
             )
             return
@@ -1337,8 +1322,7 @@ async def start_search(callback: CallbackQuery):
     
     if not is_premium and free_requests <= 0:
         await callback.answer(
-            "❌ Закончились бесплатные запросы!\n"
-            "Купите премиум 💎",
+            "❌ Закончились бесплатные запросы!\nКупите премиум 💎",
             show_alert=True
         )
         return
@@ -1366,9 +1350,10 @@ async def start_search(callback: CallbackQuery):
         db.add_found_username(user_id, nick)
         
         rating = generator.calculate_rating(nick)
-        price = rating * random.randint(10, 50)
+        # Цена в долларах (от 10 до 500)
+        price_usd = rating * random.randint(5, 50)
         
-        img_buffer = image_gen.generate_card(nick, rating, price, attempts)
+        img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
         
         text = f"""
 ✅ <b>Найден свободный ник!</b>
@@ -1377,7 +1362,7 @@ async def start_search(callback: CallbackQuery):
 📏 <b>Длина:</b> {length} символов
 {'🔢 С цифрами' if with_digits else '🔤 Только буквы'}
 ⭐ <b>Рейтинг:</b> {rating}/10
-💰 <b>Примерная стоимость:</b> {price} ⭐
+💰 <b>Ценность:</b> ${price_usd}
 🎯 <b>Найден за:</b> {attempts} попыток
 """
         
@@ -1392,8 +1377,7 @@ async def start_search(callback: CallbackQuery):
             "❌ <b>Свободный ник не найден</b>\n\n"
             f"⏳ Попыток: 15/15\n"
             f"📋 Проверено: {len(checked)} ников\n\n"
-            "💡 <b>Запрос не был потрачен!</b>\n\n"
-            "Попробуйте другой режим.",
+            "💡 <b>Запрос не был потрачен!</b>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="menu_search")],
@@ -1424,7 +1408,7 @@ async def copy_username(callback: CallbackQuery):
     await callback.answer("✅ Ник скопирован!")
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРЕМИУМ С ОПЛАТОЙ ЗВЁЗДАМИ
+# ПРЕМИУМ (ОПЛАТА ЗВЁЗДАМИ)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_premium")
@@ -1439,7 +1423,7 @@ async def menu_premium(callback: CallbackQuery):
 • Безлимитный поиск
 • Доступ к 5-буквенным никам
 
-<b>ЦЕНЫ (Telegram Stars):</b>
+<b>ЦЕНЫ:</b>
 1 день — 65⭐
 3 дня — 150⭐
 10 дней — 400⭐
@@ -1450,9 +1434,9 @@ async def menu_premium(callback: CallbackQuery):
         remaining = db.get_premium_remaining(user_id)
         days = remaining // 86400
         hours = (remaining % 86400) // 3600
-        text += f"\n✅ <b>Премиум активен:</b> {days}д {hours}ч"
+        text += f"\n✅ Активен: {days}д {hours}ч"
     else:
-        text += "\n❌ <b>Премиум не активен</b>"
+        text += "\n❌ Не активен"
     
     await callback.message.edit_text(
         text,
@@ -1467,8 +1451,7 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
     
     if callback.data == "premium_promo":
         await callback.message.edit_text(
-            "🎁 <b>Введите промокод</b>\n\n"
-            "Введите код:",
+            "🎁 Введите промокод:",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_premium")]
@@ -1482,7 +1465,7 @@ async def buy_premium(callback: CallbackQuery, state: FSMContext):
     price = PRICES.get(days, 65)
     
     title = f"Премиум GHOST — {days} дней"
-    description = f"Безлимитный поиск ников на {days} дней!"
+    description = f"Безлимитный поиск на {days} дней!"
     payload = f"premium_{days}_{user_id}_{int(time.time())}"
     prices = [LabeledPrice(label=f"{days} дней", amount=price)]
     
@@ -1519,10 +1502,7 @@ async def process_successful_payment(message: Message):
         db.add_premium(user_id, days)
         
         await message.answer(
-            f"✅ <b>Премиум активирован!</b>\n\n"
-            f"📦 {days} дней\n"
-            f"💰 {payment_info.total_amount} ⭐\n"
-            f"💎 Безлимитные поиски!",
+            f"✅ Премиум активирован!\n\n📦 {days} дней\n💰 {payment_info.total_amount} ⭐\n💎 Безлимитные поиски!",
             parse_mode="HTML",
             reply_markup=kb.main_menu(db.is_developer(user_id))
         )
@@ -1644,7 +1624,7 @@ async def menu_referrals(callback: CallbackQuery):
 <code>{link}</code>
 
 <b>Награды:</b>
-• 7 рефералов → 1 день
+• 7 → 1 день
 • 14 → 3 дня
 • 25 → 10 дней
 • 50 → 25 дней
@@ -1664,7 +1644,7 @@ async def referral_link(callback: CallbackQuery):
     link = f"https://t.me/GhostSearchNames_bot?start=ref_{code}"
     
     await callback.message.answer(
-        f"🔗 <b>Ссылка:</b>\n\n<code>{link}</code>",
+        f"🔗 Ссылка:\n\n<code>{link}</code>",
         parse_mode="HTML"
     )
     await callback.answer()
@@ -1681,7 +1661,7 @@ async def menu_info(callback: CallbackQuery):
 • Находит свободные ники 5-6 букв
 • Проверка через Telegram API
 • 15 попыток с прогрессом
-• Рейтинг и стоимость
+• Рейтинг и цена в $
 • Запрос не тратится если ник не найден
 • Оплата: Telegram Stars
 """
@@ -1758,7 +1738,7 @@ async def main():
     await start_web_server()
     asyncio.create_task(keep_alive())
     
-    logger.info("🚀 Бот GHOST запущен!")
+    logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
     
     try:

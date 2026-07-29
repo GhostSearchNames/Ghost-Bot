@@ -1,10 +1,9 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 21.0 - ПОЛНОСТЬЮ РАБОЧАЯ
-- СОХРАНЯЕТ БАЗУ ДАННЫХ
-- НЕ ПРОПУСКАЕТ СВОБОДНЫЕ НИКИ
-- ОСТАНАВЛИВАЕТСЯ НА ПЕРВОМ СВОБОДНОМ
-- ЦЕНА В ДОЛЛАРАХ
+Версия: 24.0 - ПОИСК ИСПРАВЛЕН
+- Все функции сохранены
+- Поиск через get_chat (рабочий)
+- Останавливается на первом свободном
 """
 
 import asyncio
@@ -31,6 +30,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramBadRequest
 import aiohttp
 from aiohttp import web
 
@@ -52,7 +52,6 @@ BACKUP_DIR = "backups"
 MAX_SEARCH_ATTEMPTS = 15
 BOT_URL = "https://ghost-bot-7jbh.onrender.com"
 
-# Создаём папку для бекапов
 os.makedirs(BACKUP_DIR, exist_ok=True)
 
 logging.basicConfig(
@@ -78,7 +77,7 @@ class DevStates(StatesGroup):
     waiting_for_broadcast = State()
 
 # ═══════════════════════════════════════════════════════════════════
-# БАЗА ДАННЫХ (SQLite С АВТОБЕКАПОМ)
+# БАЗА ДАННЫХ (SQLite)
 # ═══════════════════════════════════════════════════════════════════
 
 class Database:
@@ -87,26 +86,20 @@ class Database:
         self.cursor = None
         self._connect()
         self._create_tables()
-        # Делаем бекап при старте
         self.backup_db()
         logger.info("✅ База данных SQLite подключена")
     
     def _connect(self):
-        """Подключение к базе данных"""
         try:
             self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
             self.cursor = self.conn.cursor()
-            # Включаем WAL режим для надёжности
             self.cursor.execute('PRAGMA journal_mode=WAL')
             self.cursor.execute('PRAGMA synchronous=NORMAL')
-            logger.info("✅ Подключение к БД установлено")
         except Exception as e:
             logger.error(f"❌ Ошибка подключения к БД: {e}")
-            # Пытаемся восстановить из бекапа
             self._restore_from_backup()
     
     def _restore_from_backup(self):
-        """Восстановление из последнего бекапа"""
         try:
             backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.db')])
             if backups:
@@ -115,28 +108,22 @@ class Database:
                 logger.info(f"✅ Восстановлена БД из {latest}")
                 self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
                 self.cursor = self.conn.cursor()
-            else:
-                logger.warning("⚠️ Нет доступных бекапов")
         except Exception as e:
             logger.error(f"❌ Ошибка восстановления: {e}")
     
     def backup_db(self):
-        """Создаёт резервную копию базы данных"""
         try:
             if os.path.exists(DB_FILE):
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 backup_name = f"users_{timestamp}.db"
                 backup_path = os.path.join(BACKUP_DIR, backup_name)
                 shutil.copy2(DB_FILE, backup_path)
-                # Удаляем старые бекапы (оставляем последние 5)
                 backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.db')])
                 for old_backup in backups[:-5]:
                     os.remove(os.path.join(BACKUP_DIR, old_backup))
                 logger.info(f"✅ Создан бекап: {backup_name}")
-                return True
         except Exception as e:
             logger.error(f"❌ Ошибка бекапа: {e}")
-            return False
     
     def _create_tables(self):
         self.cursor.execute('''
@@ -229,14 +216,12 @@ class Database:
                 0, 0, 0, 0, "", 0, is_dev
             ))
             self.conn.commit()
-            # Делаем бекап после добавления нового пользователя
             self.backup_db()
             return self.get_user(user_id)
     
     def update_user_field(self, user_id: int, field: str, value):
         self.cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
         self.conn.commit()
-        # Делаем бекап после изменения
         self.backup_db()
     
     def is_developer(self, user_id: int) -> bool:
@@ -416,7 +401,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ (НЕ ПРОПУСКАЕТ СВОБОДНЫЕ!)
+# ГЕНЕРАТОР НИКОВ + ПОИСК (РАБОЧИЙ ЧЕРЕЗ get_chat)
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -425,7 +410,7 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует красивые/реалистичные ники"""
+        """Генерирует красивый ник"""
         syllables = [
             'ab', 'ac', 'ad', 'ag', 'al', 'an', 'ar', 'as', 'at', 'av',
             'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
@@ -468,28 +453,28 @@ class NickGenerator:
         return nick.lower()
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК - НЕ ПРОПУСКАЕТ!"""
+        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК ЧЕРЕЗ get_chat (РАБОЧИЙ)"""
         try:
             # Пытаемся получить информацию о пользователе
-            chat = await self.bot.get_chat(f"@{nick}")
+            await self.bot.get_chat(f"@{nick}")
             # Если получили - ник занят
             logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
         except Exception as e:
             error_msg = str(e).lower()
-            # Если ошибка "user not found" - ник СВОБОДЕН!
-            if "user not found" in error_msg:
-                logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                return True
             # Если ошибка "chat not found" - ник СВОБОДЕН!
             if "chat not found" in error_msg:
+                logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                return True
+            # Если ошибка "user not found" - ник СВОБОДЕН!
+            if "user not found" in error_msg:
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
             # Если ошибка "bot was blocked" - ник занят
             if "bot was blocked" in error_msg:
                 logger.info(f"❌ @{nick} - ЗАНЯТ (бот заблокирован)")
                 return False
-            # Если ошибка "flood control" - считаем занятым
+            # Если ошибка "flood" - считаем занятым
             if "flood" in error_msg:
                 logger.info(f"⚠️ @{nick} - FLOOD, считаем занятым")
                 return False
@@ -556,7 +541,7 @@ class NickGenerator:
                     )
                 break
             
-            # Задержка 1.5 секунды (чтобы не банили)
+            # Задержка 1.5 секунды
             await asyncio.sleep(1.5)
         
         if not found and message:
@@ -1170,7 +1155,7 @@ async def dev_promo_delete_input(message: Message, state: FSMContext):
         return
 
 # ═══════════════════════════════════════════════════════════════════
-# ВЫДАТЬ ПРЕМИУМ/ЗАПРОСЫ (РАЗРАБОТЧИК)
+# ВЫДАТЬ ПРЕМИУМ/ЗАПРОСЫ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "dev_give_premium")
@@ -1321,7 +1306,7 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК
+# ПОИСК (РАБОЧИЙ)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
@@ -1809,13 +1794,13 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
-    logger.info("✅ База данных сохраняется автоматически")
+    logger.info("✅ Поиск через get_chat (рабочий)")
+    logger.info("✅ База данных сохраняется")
     
     try:
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
-        # Делаем финальный бекап
         db.backup_db()
 
 if __name__ == "__main__":

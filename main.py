@@ -409,12 +409,6 @@ class NickGenerator:
     def __init__(self, bot: Bot):
         self.bot = bot
         self.checked_cache = set()
-        self.session = None
-    
-    async def get_session(self):
-        if self.session is None:
-            self.session = aiohttp.ClientSession()
-        return self.session
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
         """Генерирует красивый ник"""
@@ -460,16 +454,23 @@ class NickGenerator:
         return nick.lower()
     
     async def check_available(self, nick: str) -> bool:
-        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК"""
+        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК - ПРАВИЛЬНАЯ ЛОГИКА!"""
         try:
+            # ПЫТАЕМСЯ ПОЛУЧИТЬ ЧАТ
             await self.bot.get_chat(f"@{nick}")
-            logger.info(f"❌ @{nick} - ЗАНЯТ")
+            # ЕСЛИ ПОЛУЧИЛИ - НИК ЗАНЯТ
+            logger.info(f"❌ @{nick} - ЗАНЯТ (найден в Telegram)")
             return False
-        except Exception as e:
-            error_msg = str(e).lower()
-            if "chat not found" in error_msg or "user not found" in error_msg:
+        except TelegramBadRequest as e:
+            # ЕСЛИ ОШИБКА "CHAT NOT FOUND" - НИК СВОБОДЕН!
+            if "chat not found" in str(e).lower():
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
+            # ЕСЛИ ДРУГАЯ ОШИБКА - СЧИТАЕМ ЗАНЯТЫМ
+            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
+            return False
+        except Exception as e:
+            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
@@ -567,7 +568,6 @@ class NickGenerator:
             rating += 0.5
         
         return min(10, max(1, round(rating)))
-
 # ═══════════════════════════════════════════════════════════════════
 # ГЕНЕРАТОР КАРТИНОК
 # ═══════════════════════════════════════════════════════════════════

@@ -32,6 +32,22 @@ import aiohttp
 from aiohttp import web
 
 # ═══════════════════════════════════════════════════════════════════
+# СОСТОЯНИЯ FSM (ОБЯЗАТЕЛЬНО!)
+# ═══════════════════════════════════════════════════════════════════
+
+class PromoStates(StatesGroup):
+    waiting_for_promo = State()
+
+class DevStates(StatesGroup):
+    waiting_for_user_id = State()
+    waiting_for_days = State()
+    waiting_for_count = State()
+    waiting_for_promo_code = State()
+    waiting_for_promo_days = State()
+    waiting_for_promo_limit = State()
+    waiting_for_broadcast = State()
+
+# ═══════════════════════════════════════════════════════════════════
 # КОНФИГУРАЦИЯ
 # ═══════════════════════════════════════════════════════════════════
 
@@ -768,7 +784,8 @@ async def cmd_start(message: Message, command: CommandObject):
 
 📌 <b>Для новичков:</b>
 • {db.get_free_requests(user_id)} бесплатных поисков в день
-• После каждого поиска кд 30 секунд• Запросы обновляются каждые 2 дня (+3)
+• После каждого поиска кд 30 секунд
+• Запросы обновляются каждые 2 дня (+3)
 • <b>Запрос не тратится, если ник не найден!</b>
 
 💎 <b>Премиум:</b>

@@ -785,6 +785,7 @@ async def cmd_start(message: Message, command: CommandObject):
 
 @dp.callback_query(F.data == "menu_back")
 async def menu_back(callback: CallbackQuery):
+    """Возврат в главное меню"""
     user_id = callback.from_user.id
     is_dev = db.is_developer(user_id)
     
@@ -792,7 +793,14 @@ async def menu_back(callback: CallbackQuery):
     if is_dev:
         text = "👻 <b>GHOST — главное меню (Разработчик)</b>\n\nВыберите раздел:"
     
-    await callback.message.edit_text(
+    # Удаляем старое сообщение с результатом поиска
+    try:
+        await callback.message.delete()
+    except:
+        pass
+    
+    # Отправляем новое сообщение с главным меню
+    await callback.message.answer(
         text,
         reply_markup=kb.main_menu(is_dev),
         parse_mode="HTML"
@@ -938,11 +946,7 @@ async def noop_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "search_skip")
 async def search_skip(callback: CallbackQuery):
-    """Пропустить найденный ник и начать новый поиск с теми же параметрами"""
-    user_id = callback.from_user.id
-    
-    # Получаем последние параметры поиска из базы или передаем через состояние
-    # Просто открываем меню поиска заново
+    """Пропустить"""
     await menu_search(callback)
 
 @dp.callback_query(F.data.startswith("copy_"))

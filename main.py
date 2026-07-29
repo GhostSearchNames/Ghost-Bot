@@ -938,6 +938,11 @@ async def noop_callback(callback: CallbackQuery):
 
 @dp.callback_query(F.data == "search_skip")
 async def search_skip(callback: CallbackQuery):
+    """Пропустить найденный ник и начать новый поиск с теми же параметрами"""
+    user_id = callback.from_user.id
+    
+    # Получаем последние параметры поиска из базы или передаем через состояние
+    # Просто открываем меню поиска заново
     await menu_search(callback)
 
 @dp.callback_query(F.data.startswith("copy_"))

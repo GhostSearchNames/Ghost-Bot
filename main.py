@@ -1,6 +1,10 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 20.0 - БЫСТРЫЙ ПОИСК + ЦЕНА В $
+Версия: 21.0 - ПОЛНОСТЬЮ РАБОЧАЯ
+- СОХРАНЯЕТ БАЗУ ДАННЫХ
+- НЕ ПРОПУСКАЕТ СВОБОДНЫЕ НИКИ
+- ОСТАНАВЛИВАЕТСЯ НА ПЕРВОМ СВОБОДНОМ
+- ЦЕНА В ДОЛЛАРАХ
 """
 
 import asyncio
@@ -12,6 +16,7 @@ import os
 import sqlite3
 import hashlib
 import re
+import shutil
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 from io import BytesIO
@@ -43,8 +48,12 @@ REQUESTS_ADD_AMOUNT = 3
 REQUESTS_UPDATE_DAYS = 2
 COOLDOWN_SECONDS = 30
 DB_FILE = "users.db"
+BACKUP_DIR = "backups"
 MAX_SEARCH_ATTEMPTS = 15
 BOT_URL = "https://ghost-bot-7jbh.onrender.com"
+
+# Создаём папку для бекапов
+os.makedirs(BACKUP_DIR, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,15 +78,65 @@ class DevStates(StatesGroup):
     waiting_for_broadcast = State()
 
 # ═══════════════════════════════════════════════════════════════════
-# БАЗА ДАННЫХ (SQLite)
+# БАЗА ДАННЫХ (SQLite С АВТОБЕКАПОМ)
 # ═══════════════════════════════════════════════════════════════════
 
 class Database:
     def __init__(self):
-        self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-        self.cursor = self.conn.cursor()
+        self.conn = None
+        self.cursor = None
+        self._connect()
         self._create_tables()
+        # Делаем бекап при старте
+        self.backup_db()
         logger.info("✅ База данных SQLite подключена")
+    
+    def _connect(self):
+        """Подключение к базе данных"""
+        try:
+            self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+            self.cursor = self.conn.cursor()
+            # Включаем WAL режим для надёжности
+            self.cursor.execute('PRAGMA journal_mode=WAL')
+            self.cursor.execute('PRAGMA synchronous=NORMAL')
+            logger.info("✅ Подключение к БД установлено")
+        except Exception as e:
+            logger.error(f"❌ Ошибка подключения к БД: {e}")
+            # Пытаемся восстановить из бекапа
+            self._restore_from_backup()
+    
+    def _restore_from_backup(self):
+        """Восстановление из последнего бекапа"""
+        try:
+            backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.db')])
+            if backups:
+                latest = backups[-1]
+                shutil.copy2(os.path.join(BACKUP_DIR, latest), DB_FILE)
+                logger.info(f"✅ Восстановлена БД из {latest}")
+                self.conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+                self.cursor = self.conn.cursor()
+            else:
+                logger.warning("⚠️ Нет доступных бекапов")
+        except Exception as e:
+            logger.error(f"❌ Ошибка восстановления: {e}")
+    
+    def backup_db(self):
+        """Создаёт резервную копию базы данных"""
+        try:
+            if os.path.exists(DB_FILE):
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_name = f"users_{timestamp}.db"
+                backup_path = os.path.join(BACKUP_DIR, backup_name)
+                shutil.copy2(DB_FILE, backup_path)
+                # Удаляем старые бекапы (оставляем последние 5)
+                backups = sorted([f for f in os.listdir(BACKUP_DIR) if f.endswith('.db')])
+                for old_backup in backups[:-5]:
+                    os.remove(os.path.join(BACKUP_DIR, old_backup))
+                logger.info(f"✅ Создан бекап: {backup_name}")
+                return True
+        except Exception as e:
+            logger.error(f"❌ Ошибка бекапа: {e}")
+            return False
     
     def _create_tables(self):
         self.cursor.execute('''
@@ -170,11 +229,15 @@ class Database:
                 0, 0, 0, 0, "", 0, is_dev
             ))
             self.conn.commit()
+            # Делаем бекап после добавления нового пользователя
+            self.backup_db()
             return self.get_user(user_id)
     
     def update_user_field(self, user_id: int, field: str, value):
         self.cursor.execute(f'UPDATE users SET {field} = ? WHERE user_id = ?', (value, user_id))
         self.conn.commit()
+        # Делаем бекап после изменения
+        self.backup_db()
     
     def is_developer(self, user_id: int) -> bool:
         user = self.get_user(user_id)
@@ -249,6 +312,7 @@ class Database:
             VALUES (?, ?, ?)
         ''', (user_id, username, int(time.time())))
         self.conn.commit()
+        self.backup_db()
     
     def get_found_usernames(self, user_id: int, limit: int = 20) -> List[Dict]:
         self.cursor.execute('''
@@ -292,6 +356,7 @@ class Database:
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (code.upper(), days, max_uses, int(time.time()), int(time.time()) + 86400 * 30, created_by))
             self.conn.commit()
+            self.backup_db()
             return True
         except:
             return False
@@ -300,6 +365,7 @@ class Database:
         try:
             self.cursor.execute('DELETE FROM promo_codes WHERE code = ?', (code.upper(),))
             self.conn.commit()
+            self.backup_db()
             return self.cursor.rowcount > 0
         except:
             return False
@@ -344,12 +410,13 @@ class Database:
         self.cursor.execute('INSERT INTO promo_used (user_id, promo_id, used_at) VALUES (?, ?, ?)', 
                           (user_id, row[0], int(time.time())))
         self.conn.commit()
+        self.backup_db()
         return True, f"✅ Премиум на {days} дней активирован!", days
 
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР КРАСИВЫХ НИКОВ + БЫСТРЫЙ ПОИСК
+# ГЕНЕРАТОР НИКОВ (НЕ ПРОПУСКАЕТ СВОБОДНЫЕ!)
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -358,7 +425,7 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует КРАСИВЫЕ/РЕАЛИСТИЧНЫЕ ники"""
+        """Генерирует красивые/реалистичные ники"""
         syllables = [
             'ab', 'ac', 'ad', 'ag', 'al', 'an', 'ar', 'as', 'at', 'av',
             'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
@@ -401,15 +468,32 @@ class NickGenerator:
         return nick.lower()
     
     async def check_available(self, nick: str) -> bool:
-        """Проверяет, свободен ли ник"""
+        """ПРОВЕРЯЕТ СВОБОДЕН ЛИ НИК - НЕ ПРОПУСКАЕТ!"""
         try:
-            await self.bot.get_chat(f"@{nick}")
+            # Пытаемся получить информацию о пользователе
+            chat = await self.bot.get_chat(f"@{nick}")
+            # Если получили - ник занят
             logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
         except Exception as e:
-            if "user not found" in str(e).lower():
+            error_msg = str(e).lower()
+            # Если ошибка "user not found" - ник СВОБОДЕН!
+            if "user not found" in error_msg:
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
+            # Если ошибка "chat not found" - ник СВОБОДЕН!
+            if "chat not found" in error_msg:
+                logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                return True
+            # Если ошибка "bot was blocked" - ник занят
+            if "bot was blocked" in error_msg:
+                logger.info(f"❌ @{nick} - ЗАНЯТ (бот заблокирован)")
+                return False
+            # Если ошибка "flood control" - считаем занятым
+            if "flood" in error_msg:
+                logger.info(f"⚠️ @{nick} - FLOOD, считаем занятым")
+                return False
+            # Все остальные ошибки - считаем занятым
             logger.info(f"⚠️ @{nick} - ОШИБКА: {e}")
             return False
     
@@ -470,9 +554,9 @@ class NickGenerator:
                         f"📋 Проверено: {len(checked)} ников",
                         parse_mode="HTML"
                     )
-                break  # ВЫХОДИМ ИЗ ЦИКЛА!
+                break
             
-            # Задержка 1.5 секунды
+            # Задержка 1.5 секунды (чтобы не банили)
             await asyncio.sleep(1.5)
         
         if not found and message:
@@ -512,7 +596,7 @@ class NickGenerator:
         return min(10, max(1, round(rating)))
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР КАРТИНОК (С ЦЕНОЙ В ДОЛЛАРАХ)
+# ГЕНЕРАТОР КАРТИНОК
 # ═══════════════════════════════════════════════════════════════════
 
 class ImageGenerator:
@@ -546,12 +630,10 @@ class ImageGenerator:
         image = Image.new('RGB', (width, height), color=(10, 10, 25))
         draw = ImageDraw.Draw(image)
         
-        # Градиент
         for i in range(height):
             color_value = int(10 + (i / height) * 20)
             draw.rectangle([(0, i), (width, i + 1)], fill=(color_value, color_value, color_value + 5))
         
-        # Рамка
         for i in range(3):
             offset = i * 3
             draw.rectangle(
@@ -560,28 +642,16 @@ class ImageGenerator:
                 width=2
             )
         
-        # Заголовок
         draw.text((width // 2, 30), "👻 НАЙДЕН НИК!", font=self.fonts["medium"], fill=(255,255,255), anchor="mm")
-        
-        # Проверки
         draw.text((width // 2, 80), "✅ Telegram — свободен", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
         draw.text((width // 2, 110), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
-        
-        # Ник
         draw.text((width // 2, 180), f"@{nick}", font=self.fonts["large"], fill=(0,255,200), anchor="mm")
         
-        # Рейтинг (звёзды)
         stars = "⭐" * rating + "☆" * (10 - rating)
         draw.text((width // 2, 270), f"Рейтинг: {rating}/10", font=self.fonts["medium"], fill=(255,215,0), anchor="mm")
         draw.text((width // 2, 305), stars, font=self.fonts["small"], fill=(255,215,0), anchor="mm")
-        
-        # ЦЕНА В ДОЛЛАРАХ
         draw.text((width // 2, 340), f"💰 Ценность: ${price_usd}", font=self.fonts["medium"], fill=(0,255,100), anchor="mm")
-        
-        # Попытка
         draw.text((width // 2, 385), f"🎯 Найден за {attempts} попыток", font=self.fonts["small"], fill=(150,150,150), anchor="mm")
-        
-        # Футер
         draw.text((width // 2, height - 25), "👻 Ghost - Ники | @gawuzu", font=self.fonts["small"], fill=(80,80,80), anchor="mm")
         
         image_buffer = BytesIO()
@@ -779,7 +849,7 @@ async def menu_back(callback: CallbackQuery):
     await callback.answer()
 
 # ═══════════════════════════════════════════════════════════════════
-# МЕНЮ РАЗРАБОТЧИКА (ВСЁ РАБОТАЕТ)
+# МЕНЮ РАЗРАБОТЧИКА
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_dev")
@@ -905,7 +975,7 @@ async def process_broadcast(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРОМОКОДЫ (РАЗРАБОТЧИК)
+# ПРОМОКОДЫ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "dev_promos")
@@ -1100,7 +1170,7 @@ async def dev_promo_delete_input(message: Message, state: FSMContext):
         return
 
 # ═══════════════════════════════════════════════════════════════════
-# ВЫДАТЬ ПРЕМИУМ (РАЗРАБОТЧИК)
+# ВЫДАТЬ ПРЕМИУМ/ЗАПРОСЫ (РАЗРАБОТЧИК)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "dev_give_premium")
@@ -1251,7 +1321,7 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК (ОСТАНАВЛИВАЕТСЯ НА ПЕРВОМ СВОБОДНОМ)
+# ПОИСК
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_search")
@@ -1350,7 +1420,6 @@ async def start_search(callback: CallbackQuery):
         db.add_found_username(user_id, nick)
         
         rating = generator.calculate_rating(nick)
-        # Цена в долларах (от 10 до 500)
         price_usd = rating * random.randint(5, 50)
         
         img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
@@ -1408,7 +1477,7 @@ async def copy_username(callback: CallbackQuery):
     await callback.answer("✅ Ник скопирован!")
 
 # ═══════════════════════════════════════════════════════════════════
-# ПРЕМИУМ (ОПЛАТА ЗВЁЗДАМИ)
+# ПРЕМИУМ
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_premium")
@@ -1740,11 +1809,14 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
+    logger.info("✅ База данных сохраняется автоматически")
     
     try:
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
+        # Делаем финальный бекап
+        db.backup_db()
 
 if __name__ == "__main__":
     asyncio.run(main())

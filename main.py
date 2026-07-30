@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 42.0 - ПОЛНОСТЬЮ РАБОЧАЯ
+Версия: 43.0 - БЫСТРЫЙ ПОИСК!
 """
 
 import asyncio
@@ -410,7 +410,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + ПОИСК
+# ГЕНЕРАТОР НИКОВ + БЫСТРЫЙ ПОИСК
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -419,6 +419,7 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
+        """Генерирует БЛАТНЫЕ/КРАСИВЫЕ ники"""
         syllables = [
             'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
             'da', 'de', 'di', 'do', 'du', 'el', 'en', 'er', 'es', 'et',
@@ -450,30 +451,35 @@ class NickGenerator:
         
         return nick.lower()
     
+    async def check_fragment(self, nick: str) -> bool:
+        """ПРОВЕРКА НА АУКЦИОНЕ FRAGMENT"""
+        try:
+            url = f"https://fragment.com/username/{nick}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=3) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        if "Auction" in html or "Bid" in html or "auction" in html:
+                            return True
+                    return False
+        except:
+            return False
+    
     async def check_available(self, nick: str) -> bool:
-        """ТОЧНАЯ ПРОВЕРКА - API + FRAGMENT"""
+        """БЫСТРАЯ ТОЧНАЯ ПРОВЕРКА"""
         try:
             await self.bot.get_chat(f"@{nick}")
-            logger.info(f"❌ @{nick} - ЗАНЯТ (Telegram)")
+            logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
         except TelegramBadRequest as e:
             error = str(e).lower()
             if "chat not found" in error or "user not found" in error:
-                # Проверяем Fragment
-                try:
-                    url = f"https://fragment.com/username/{nick}"
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(url, timeout=5) as response:
-                            if response.status == 200:
-                                html = await response.text()
-                                if "Auction" in html or "Bid" in html or "auction" in html:
-                                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT!")
-                                    return False
-                    logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                    return True
-                except:
-                    logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                    return True
+                on_fragment = await self.check_fragment(nick)
+                if on_fragment:
+                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ")
+                    return False
+                logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                return True
             return False
         except Exception as e:
             logger.info(f"❌ @{nick} - ОШИБКА: {e}")
@@ -481,6 +487,7 @@ class NickGenerator:
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
+        """БЫСТРЫЙ ПОИСК - ОСТАНАВЛИВАЕТСЯ НА ПЕРВОМ СВОБОДНОМ"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
@@ -536,7 +543,7 @@ class NickGenerator:
                     )
                 break
             
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(0.5)
         
         if not found and message:
             await message.edit_text(
@@ -859,7 +866,7 @@ async def menu_search(callback: CallbackQuery):
     await callback.answer()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК
+# ПОИСК (БЫСТРЫЙ!)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data.startswith("search_"))
@@ -976,10 +983,6 @@ async def copy_username(callback: CallbackQuery):
         f"📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
         parse_mode="HTML"
     )
-
-# ═══════════════════════════════════════════════════════════════════
-# ⚠️ ВАЖНО: НЕ ДОБАВЛЯЙ ОБРАБОТЧИК НА ВСЕ СООБЩЕНИЯ!
-# ═══════════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════════
 # ПРЕМИУМ
@@ -1111,7 +1114,7 @@ async def handle_promo(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# МЕНЮ РАЗРАБОТЧИКА (ВСЁ РАБОТАЕТ)
+# МЕНЮ РАЗРАБОТЧИКА
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_dev")
@@ -1839,7 +1842,8 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
-    logger.info("✅ Поиск с проверкой Fragment")
+    logger.info("✅ БЫСТРЫЙ поиск (0.5 сек)")
+    logger.info("✅ Проверка Fragment")
     logger.info("✅ База данных сохраняется")
     
     try:

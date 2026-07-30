@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 40.0 - ИСПРАВЛЕННАЯ
+Версия: 41.0 - ВСЁ РАБОТАЕТ!
 """
 
 import asyncio
@@ -46,6 +46,7 @@ class DevStates(StatesGroup):
     waiting_for_promo_days = State()
     waiting_for_promo_limit = State()
     waiting_for_broadcast = State()
+    waiting_for_all_requests = State()
 
 # ═══════════════════════════════════════════════════════════════════
 # КОНФИГУРАЦИЯ
@@ -267,6 +268,15 @@ class Database:
         new_count = min(current + count, MAX_FREE_REQUESTS)
         self.update_user_field(user_id, "free_requests", new_count)
     
+    def add_free_requests_all(self, count: int) -> int:
+        """Выдать запросы всем пользователям"""
+        users = self.get_all_users()
+        updated = 0
+        for uid in users:
+            self.add_free_requests(uid, count)
+            updated += 1
+        return updated
+    
     def use_free_request(self, user_id: int) -> bool:
         user = self.get_user(user_id)
         current_requests = user.get("free_requests", 0)
@@ -401,7 +411,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + ПОИСК
+# ГЕНЕРАТОР НИКОВ + ПОИСК (ТОЧНАЯ ПРОВЕРКА)
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -442,15 +452,36 @@ class NickGenerator:
         
         return nick.lower()
     
-    async def check_available(self, nick: str) -> bool:
-        """ТОЧНАЯ ПРОВЕРКА"""
+    async def check_fragment(self, nick: str) -> bool:
+        """ПРОВЕРКА НА АУКЦИОНЕ FRAGMENT"""
         try:
+            url = f"https://fragment.com/username/{nick}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=5) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        if "Auction" in html or "Bid" in html or "auction" in html:
+                            return True
+                    return False
+        except Exception as e:
+            logger.error(f"Ошибка Fragment: {e}")
+            return False
+    
+    async def check_available(self, nick: str) -> bool:
+        """ТОЧНАЯ ПРОВЕРКА - API + FRAGMENT"""
+        try:
+            # 1. ПРОВЕРКА TELEGRAM API
             await self.bot.get_chat(f"@{nick}")
-            logger.info(f"❌ @{nick} - ЗАНЯТ")
+            logger.info(f"❌ @{nick} - ЗАНЯТ (Telegram)")
             return False
         except TelegramBadRequest as e:
             error = str(e).lower()
+            # 2. ЕСЛИ НЕ НАЙДЕН - ПРОВЕРЯЕМ FRAGMENT
             if "chat not found" in error or "user not found" in error:
+                on_fragment = await self.check_fragment(nick)
+                if on_fragment:
+                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT!")
+                    return False
                 logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
             return False
@@ -460,7 +491,7 @@ class NickGenerator:
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник"""
+        """Ищет свободный ник - останавливается на ПЕРВОМ найденном"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
@@ -516,7 +547,7 @@ class NickGenerator:
                     )
                 break
             
-            await asyncio.sleep(1.2)
+            await asyncio.sleep(1.0)
         
         if not found and message:
             await message.edit_text(
@@ -591,6 +622,7 @@ class ImageGenerator:
         
         draw.text((width // 2, 30), "👻 НАЙДЕН НИК!", font=self.fonts["medium"], fill=(255,255,255), anchor="mm")
         draw.text((width // 2, 80), "✅ Telegram — свободен", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
+        draw.text((width // 2, 110), "✅ Fragment — не на аукционе", font=self.fonts["small"], fill=(0,255,100), anchor="mm")
         draw.text((width // 2, 180), f"@{nick}", font=self.fonts["large"], fill=(0,255,200), anchor="mm")
         
         stars = "⭐" * rating + "☆" * (10 - rating)
@@ -635,6 +667,7 @@ class Keyboards:
             [InlineKeyboardButton(text="🎁 Промокоды", callback_data="dev_promos")],
             [InlineKeyboardButton(text="💎 Выдать премиум", callback_data="dev_give_premium")],
             [InlineKeyboardButton(text="📦 Выдать запросы", callback_data="dev_give_requests")],
+            [InlineKeyboardButton(text="📦 Всем запросы", callback_data="dev_give_all_requests")],
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_back")]
         ])
     
@@ -749,7 +782,7 @@ async def cmd_start(message: Message, command: CommandObject):
 
 🎯 <b>Что здесь можно делать?</b>
 • Находить свободные Telegram-ни́ки
-• Проверка через Telegram API
+• Проверка через Telegram API + Fragment
 • Получать рейтинг и стоимость ника
 
 📌 <b>Доступные режимы:</b>
@@ -780,7 +813,6 @@ async def cmd_start(message: Message, command: CommandObject):
 
 @dp.callback_query(F.data == "menu_back")
 async def menu_back(callback: CallbackQuery):
-    """Возврат в главное меню"""
     user_id = callback.from_user.id
     is_dev = db.is_developer(user_id)
     
@@ -816,7 +848,8 @@ async def menu_search(callback: CallbackQuery):
 🔍 <b>ПОИСК ЮЗЕРНЕЙМА</b>
 
 ✅ Каждый найденный ник проходит проверку:
-  • Telegram — не занят профилем, каналом или ботом
+  • Telegram — не занят
+  • Fragment — не на аукционе
 
 📌 <b>Доступные режимы:</b>
   • 6 букв — бесплатно
@@ -1198,6 +1231,54 @@ async def dev_give_requests(callback: CallbackQuery, state: FSMContext):
     await state.set_state(DevStates.waiting_for_user_id)
     await state.update_data(action="requests")
     await callback.answer()
+
+@dp.callback_query(F.data == "dev_give_all_requests")
+async def dev_give_all_requests(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    
+    if not db.is_developer(user_id):
+        await callback.answer("⛔ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "📦 Выдать запросы ВСЕМ пользователям\n\n"
+        "Введите количество запросов для всех (1-100):",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="menu_dev")]
+        ])
+    )
+    await state.set_state(DevStates.waiting_for_all_requests)
+    await callback.answer()
+
+@dp.message(DevStates.waiting_for_all_requests)
+async def dev_all_requests_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if not db.is_developer(user_id):
+        await message.answer("⛔ Доступ запрещен")
+        await state.clear()
+        return
+    
+    try:
+        count = int(message.text.strip())
+        if count < 1 or count > 100:
+            raise ValueError
+    except:
+        await message.answer("❌ Введите число от 1 до 100:")
+        return
+    
+    updated = db.add_free_requests_all(count)
+    
+    await message.answer(
+        f"✅ <b>Запросы выданы всем пользователям!</b>\n\n"
+        f"📊 +{count} запросов\n"
+        f"👥 Получили: {updated} пользователей",
+        parse_mode="HTML",
+        reply_markup=kb.dev_menu()
+    )
+    
+    await state.clear()
 
 @dp.message(DevStates.waiting_for_user_id)
 async def dev_user_id_input(message: Message, state: FSMContext):
@@ -1693,7 +1774,7 @@ async def menu_info(callback: CallbackQuery):
 ℹ️ <b>GHOST - Поиск Ников</b>
 
 • Находит свободные ники 5-6 букв
-• Проверка через Telegram API
+• Проверка Telegram API + Fragment
 • 15 попыток с прогрессом
 • Рейтинг и цена в $
 • Запрос не тратится если ник не найден
@@ -1770,7 +1851,7 @@ async def main():
     
     logger.info("🚀 GHOST запущен!")
     logger.info("👤 @gawuzu")
-    logger.info("✅ Поиск работает!")
+    logger.info("✅ Поиск с проверкой Fragment")
     logger.info("✅ База данных сохраняется")
     
     try:

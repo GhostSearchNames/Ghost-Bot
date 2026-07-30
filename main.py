@@ -415,54 +415,34 @@ class NickGenerator:
     def __init__(self, bot: Bot):
         self.bot = bot
         self.checked_cache = set()
-        # КРАСИВЫЕ НИКИ ДЛЯ ГЕНЕРАЦИИ
-        self.nicks = ['alex', 'ben', 'kate', 'mike', 'john', 'luna', 'nova', 
-                      'kira', 'max', 'leo', 'mia', 'zoe', 'ray', 'jay', 
-                      'fox', 'sky', 'ash', 'ryu', 'elio', 'nova', 'aria',
-                      'ezra', 'luca', 'mila', 'noah', 'oliver', 'amelia',
-                      'harper', 'evelyn', 'logan', 'zara', 'felix']
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует красивый ник"""
-        if length == 5:
-            nicks_5 = ['alex', 'ben', 'kate', 'mike', 'john', 'luna', 'nova', 
-                       'kira', 'max', 'leo', 'mia', 'zoe', 'ray', 'jay', 
-                       'fox', 'sky', 'ash', 'ryu', 'elio', 'aria', 'ezra',
-                       'luca', 'mila', 'noah', 'zara', 'felix']
-            nick = random.choice(nicks_5)
-        else:
-            nicks_6 = ['oliver', 'amelia', 'harper', 'evelyn', 'logan', 'lucas',
-                       'emma', 'mason', 'sophia', 'ethan', 'mia', 'noah']
-            nick = random.choice(nicks_6)
-        
-        if with_digits:
-            nick += random.choice('0123456789')
-        
+        """Генерирует рандомный ник"""
+        vowels = 'aeiouy'
+        consonants = 'bcdfghjklmnpqrstvwxz'
+        nick = ""
+        for i in range(length):
+            if random.random() < 0.4:
+                nick += random.choice(vowels)
+            else:
+                nick += random.choice(consonants)
+        if with_digits and random.random() < 0.5:
+            nick = nick[:-1] + random.choice('0123456789')
         return nick.lower()
     
     async def check_available(self, nick: str) -> bool:
-        """ПРАВИЛЬНАЯ ПРОВЕРКА - ТОЛЬКО get_chat!"""
         try:
-            # ПЫТАЕМСЯ ПОЛУЧИТЬ ЧАТ
             await self.bot.get_chat(f"@{nick}")
-            # ЕСЛИ ПОЛУЧИЛИ - НИК ЗАНЯТ
-            logger.info(f"❌ @{nick} - ЗАНЯТ")
             return False
         except TelegramBadRequest as e:
-            # ЕСЛИ ОШИБКА "CHAT NOT FOUND" - НИК СВОБОДЕН!
             if "chat not found" in str(e).lower() or "user not found" in str(e).lower():
-                logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
-            # ЛЮБАЯ ДРУГАЯ ОШИБКА - СЧИТАЕМ ЗАНЯТЫМ
-            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
             return False
-        except Exception as e:
-            logger.info(f"❌ @{nick} - ОШИБКА: {e}")
+        except Exception:
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """БЫСТРЫЙ ПОИСК - ОСТАНАВЛИВАЕТСЯ НА ПЕРВОМ СВОБОДНОМ"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
@@ -490,16 +470,16 @@ class NickGenerator:
             checked.append(nick)
             
             if message:
-                progress_text = (
+                await message.edit_text(
                     f"🔍 <b>Поиск свободного ника...</b>\n\n"
                     f"📏 Длина: {length} символов\n"
                     f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
                     f"⏳ <b>{attempts}/{MAX_ATTEMPTS}</b>\n\n"
                     f"🔎 Проверяю: <code>@{nick}</code>\n"
                     f"📋 Проверено: {len(checked)} ников\n\n"
-                    f"<i>Ищу свободный ник...</i>"
+                    f"<i>Ищу свободный ник...</i>",
+                    parse_mode="HTML"
                 )
-                await message.edit_text(progress_text, parse_mode="HTML")
             
             logger.info(f"🔄 Попытка {attempts}/{MAX_ATTEMPTS}: @{nick}")
             
@@ -543,7 +523,6 @@ class NickGenerator:
         if 0.2 < vowels / len(nick) < 0.8:
             rating += 1
         return min(10, max(1, round(rating)))
-
 # ═══════════════════════════════════════════════════════════════════
 # ГЕНЕРАТОР КАРТИНОК
 # ═══════════════════════════════════════════════════════════════════

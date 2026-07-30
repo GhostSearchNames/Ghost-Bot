@@ -1,6 +1,6 @@
 """
 👻 GHOST - Поиск Ников
-Версия: 41.0 - ВСЁ РАБОТАЕТ!
+Версия: 42.0 - ПОЛНОСТЬЮ РАБОЧАЯ
 """
 
 import asyncio
@@ -269,7 +269,6 @@ class Database:
         self.update_user_field(user_id, "free_requests", new_count)
     
     def add_free_requests_all(self, count: int) -> int:
-        """Выдать запросы всем пользователям"""
         users = self.get_all_users()
         updated = 0
         for uid in users:
@@ -411,7 +410,7 @@ class Database:
 db = Database()
 
 # ═══════════════════════════════════════════════════════════════════
-# ГЕНЕРАТОР НИКОВ + ПОИСК (ТОЧНАЯ ПРОВЕРКА)
+# ГЕНЕРАТОР НИКОВ + ПОИСК
 # ═══════════════════════════════════════════════════════════════════
 
 class NickGenerator:
@@ -420,7 +419,6 @@ class NickGenerator:
         self.checked_cache = set()
     
     def generate_nick(self, length: int, with_digits: bool = False) -> str:
-        """Генерирует БЛАТНЫЕ/КРАСИВЫЕ ники"""
         syllables = [
             'ba', 'be', 'bi', 'bo', 'bu', 'ca', 'ce', 'ci', 'co', 'cu',
             'da', 'de', 'di', 'do', 'du', 'el', 'en', 'er', 'es', 'et',
@@ -452,38 +450,30 @@ class NickGenerator:
         
         return nick.lower()
     
-    async def check_fragment(self, nick: str) -> bool:
-        """ПРОВЕРКА НА АУКЦИОНЕ FRAGMENT"""
-        try:
-            url = f"https://fragment.com/username/{nick}"
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=5) as response:
-                    if response.status == 200:
-                        html = await response.text()
-                        if "Auction" in html or "Bid" in html or "auction" in html:
-                            return True
-                    return False
-        except Exception as e:
-            logger.error(f"Ошибка Fragment: {e}")
-            return False
-    
     async def check_available(self, nick: str) -> bool:
         """ТОЧНАЯ ПРОВЕРКА - API + FRAGMENT"""
         try:
-            # 1. ПРОВЕРКА TELEGRAM API
             await self.bot.get_chat(f"@{nick}")
             logger.info(f"❌ @{nick} - ЗАНЯТ (Telegram)")
             return False
         except TelegramBadRequest as e:
             error = str(e).lower()
-            # 2. ЕСЛИ НЕ НАЙДЕН - ПРОВЕРЯЕМ FRAGMENT
             if "chat not found" in error or "user not found" in error:
-                on_fragment = await self.check_fragment(nick)
-                if on_fragment:
-                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT!")
-                    return False
-                logger.info(f"✅ @{nick} - СВОБОДЕН!")
-                return True
+                # Проверяем Fragment
+                try:
+                    url = f"https://fragment.com/username/{nick}"
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(url, timeout=5) as response:
+                            if response.status == 200:
+                                html = await response.text()
+                                if "Auction" in html or "Bid" in html or "auction" in html:
+                                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT!")
+                                    return False
+                    logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                    return True
+                except:
+                    logger.info(f"✅ @{nick} - СВОБОДЕН!")
+                    return True
             return False
         except Exception as e:
             logger.info(f"❌ @{nick} - ОШИБКА: {e}")
@@ -491,7 +481,6 @@ class NickGenerator:
     
     async def search_free(self, length: int, with_digits: bool = False, 
                           message=None) -> Tuple[Optional[str], int, List[str]]:
-        """Ищет свободный ник - останавливается на ПЕРВОМ найденном"""
         MAX_ATTEMPTS = 15
         attempts = 0
         checked = []
@@ -870,7 +859,259 @@ async def menu_search(callback: CallbackQuery):
     await callback.answer()
 
 # ═══════════════════════════════════════════════════════════════════
-# МЕНЮ РАЗРАБОТЧИКА
+# ПОИСК
+# ═══════════════════════════════════════════════════════════════════
+
+@dp.callback_query(F.data.startswith("search_"))
+async def start_search(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    
+    banned, reason = db.is_banned(user_id)
+    if banned:
+        await callback.answer(f"🚫 {reason}", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    length = int(parts[1])
+    with_digits = parts[2] == "true"
+    
+    if length == 5:
+        is_premium = db.is_premium(user_id)
+        if not is_premium:
+            await callback.answer(
+                "🔒 5-буквенные ники только с премиум! 💎",
+                show_alert=True
+            )
+            return
+    
+    can_search, remaining = db.check_cooldown(user_id)
+    if not can_search:
+        await callback.answer(f"⏳ Подождите {remaining} секунд!", show_alert=True)
+        return
+    
+    is_premium = db.is_premium(user_id)
+    free_requests = db.get_free_requests(user_id)
+    
+    if not is_premium and free_requests <= 0:
+        await callback.answer(
+            "❌ Закончились бесплатные запросы!\nКупите премиум 💎",
+            show_alert=True
+        )
+        return
+    
+    db.update_last_search(user_id)
+    
+    search_msg = await callback.message.edit_text(
+        "🔍 <b>Поиск свободного юзернейма...</b>\n\n"
+        f"📏 Длина: {length} символов\n"
+        f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
+        f"⏳ 0/15\n\n"
+        f"<i>Начинаю поиск...</i>",
+        parse_mode="HTML"
+    )
+    
+    generator = NickGenerator(bot)
+    nick, attempts, checked = await generator.search_free(
+        length, with_digits, message=search_msg
+    )
+    
+    if nick:
+        if not is_premium:
+            db.use_free_request(user_id)
+        db.increment_searches(user_id)
+        db.add_found_username(user_id, nick)
+        
+        rating = generator.calculate_rating(nick)
+        price_usd = random.randint(7, 11)
+        
+        img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
+        
+        text = f"""
+✅ <b>Найден свободный ник!</b>
+
+👤 <b>Юзернейм:</b> @{nick}
+📏 <b>Длина:</b> {length} символов
+{'🔢 С цифрами' if with_digits else '🔤 Только буквы'}
+⭐ <b>Рейтинг:</b> {rating}/10
+💰 <b>Ценность:</b> ${price_usd}
+🎯 <b>Найден за:</b> {attempts} попыток
+"""
+        
+        await callback.message.answer_photo(
+            photo=BufferedInputFile(img_buffer.getvalue(), filename="nick.png"),
+            caption=text,
+            reply_markup=kb.result_menu(nick),
+            parse_mode="HTML"
+        )
+    else:
+        await search_msg.edit_text(
+            "❌ <b>Свободный ник не найден</b>\n\n"
+            f"⏳ Попыток: 15/15\n"
+            f"📋 Проверено: {len(checked)} ников\n\n"
+            "💡 <b>Запрос не был потрачен!</b>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="menu_search")],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_back")]
+            ])
+        )
+    
+    await callback.answer()
+
+@dp.callback_query(F.data == "noop")
+async def noop_callback(callback: CallbackQuery):
+    await callback.answer("🔒 Доступно только с премиум!", show_alert=True)
+
+@dp.callback_query(F.data == "search_skip")
+async def search_skip(callback: CallbackQuery):
+    await menu_search(callback)
+
+@dp.callback_query(F.data.startswith("copy_"))
+async def copy_username(callback: CallbackQuery):
+    nick = callback.data.split("_")[1]
+    
+    await callback.answer(f"✅ @{nick} скопирован!", show_alert=True)
+    
+    await callback.message.answer(
+        f"📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
+        parse_mode="HTML"
+    )
+
+# ═══════════════════════════════════════════════════════════════════
+# ⚠️ ВАЖНО: НЕ ДОБАВЛЯЙ ОБРАБОТЧИК НА ВСЕ СООБЩЕНИЯ!
+# ═══════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════
+# ПРЕМИУМ
+# ═══════════════════════════════════════════════════════════════════
+
+@dp.callback_query(F.data == "menu_premium")
+async def menu_premium(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    is_premium = db.is_premium(user_id)
+    
+    text = """
+💎 <b>ПРЕМИУМ ПОДПИСКА</b>
+
+<b>ФУНКЦИИ:</b>
+• Безлимитный поиск
+• Доступ к 5-буквенным никам
+
+<b>ЦЕНЫ:</b>
+1 день — 65⭐
+3 дня — 150⭐
+10 дней — 400⭐
+30 дней — 800⭐
+"""
+    
+    if is_premium:
+        remaining = db.get_premium_remaining(user_id)
+        days = remaining // 86400
+        hours = (remaining % 86400) // 3600
+        text += f"\n✅ Активен: {days}д {hours}ч"
+    else:
+        text += "\n❌ Не активен"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=kb.premium_menu(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data.startswith("premium_"))
+async def buy_premium(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    
+    if callback.data == "premium_promo":
+        await callback.message.edit_text(
+            "🎁 Введите промокод:",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_premium")]
+            ])
+        )
+        await state.set_state(PromoStates.waiting_for_promo)
+        await callback.answer()
+        return
+    
+    days = int(callback.data.split("_")[1])
+    price = PRICES.get(days, 65)
+    
+    title = f"Премиум GHOST — {days} дней"
+    description = f"Безлимитный поиск на {days} дней!"
+    payload = f"premium_{days}_{user_id}_{int(time.time())}"
+    prices = [LabeledPrice(label=f"{days} дней", amount=price)]
+    
+    try:
+        await bot.send_invoice(
+            chat_id=user_id,
+            title=title,
+            description=description,
+            payload=payload,
+            provider_token="",
+            currency="XTR",
+            prices=prices,
+            start_parameter="premium"
+        )
+        await callback.answer()
+    except Exception as e:
+        logger.error(f"Ошибка: {e}")
+        await callback.answer("❌ Ошибка платежа", show_alert=True)
+
+@dp.pre_checkout_query()
+async def pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@dp.message(F.content_type == ContentType.SUCCESSFUL_PAYMENT)
+async def process_successful_payment(message: Message):
+    user_id = message.from_user.id
+    payment_info = message.successful_payment
+    
+    payload = payment_info.invoice_payload
+    parts = payload.split("_")
+    
+    if len(parts) >= 2 and parts[0] == "premium":
+        days = int(parts[1])
+        new_until = db.add_premium(user_id, days)
+        
+        await message.answer(
+            f"✅ <b>Премиум активирован!</b>\n\n"
+            f"📦 {days} дней\n"
+            f"💰 {payment_info.total_amount} ⭐\n"
+            f"💎 Безлимитные поиски!\n"
+            f"🕐 До: {datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')}",
+            parse_mode="HTML",
+            reply_markup=kb.main_menu(db.is_developer(user_id))
+        )
+
+@dp.message(PromoStates.waiting_for_promo)
+async def handle_promo(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    code = message.text.strip().upper()
+    
+    success, msg, days = db.use_promo(user_id, code)
+    
+    if success:
+        await message.answer(
+            f"✅ {msg}\n\n🎉 Премиум на {days} дней!",
+            parse_mode="HTML",
+            reply_markup=kb.main_menu(db.is_developer(user_id))
+        )
+    else:
+        await message.answer(
+            f"❌ {msg}",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="premium_promo")],
+                [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_premium")]
+            ])
+        )
+    
+    await state.clear()
+
+# ═══════════════════════════════════════════════════════════════════
+# МЕНЮ РАЗРАБОТЧИКА (ВСЁ РАБОТАЕТ)
 # ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "menu_dev")
@@ -994,205 +1235,6 @@ async def process_broadcast(message: Message, state: FSMContext):
         parse_mode="HTML"
     )
     await state.clear()
-
-# ═══════════════════════════════════════════════════════════════════
-# ПРОМОКОДЫ
-# ═══════════════════════════════════════════════════════════════════
-
-@dp.callback_query(F.data == "dev_promos")
-async def dev_promos_menu(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    if not db.is_developer(user_id):
-        await callback.answer("⛔ Доступ запрещен", show_alert=True)
-        return
-    
-    await callback.message.edit_text(
-        "🎁 Управление промокодами",
-        reply_markup=kb.dev_promos_menu(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data == "dev_promo_create")
-async def dev_promo_create(callback: CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    
-    if not db.is_developer(user_id):
-        await callback.answer("⛔ Доступ запрещен", show_alert=True)
-        return
-    
-    await callback.message.edit_text(
-        "🎁 Создать промокод\n\nВведите код (буквы и цифры):",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
-        ])
-    )
-    await state.set_state(DevStates.waiting_for_promo_code)
-    await callback.answer()
-
-@dp.message(DevStates.waiting_for_promo_code)
-async def dev_promo_code_input(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    if not db.is_developer(user_id):
-        await message.answer("⛔ Доступ запрещен")
-        await state.clear()
-        return
-    
-    code = message.text.strip().upper()
-    if not re.match(r'^[A-Z0-9]+$', code):
-        await message.answer("❌ Только буквы и цифры:")
-        return
-    
-    await state.update_data(promo_code=code)
-    await message.answer("📅 Количество дней (1-365):")
-    await state.set_state(DevStates.waiting_for_promo_days)
-
-@dp.message(DevStates.waiting_for_promo_days)
-async def dev_promo_days_input(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    if not db.is_developer(user_id):
-        await message.answer("⛔ Доступ запрещен")
-        await state.clear()
-        return
-    
-    try:
-        days = int(message.text.strip())
-        if days < 1 or days > 365:
-            raise ValueError
-    except:
-        await message.answer("❌ Введите число от 1 до 365:")
-        return
-    
-    await state.update_data(promo_days=days)
-    await message.answer("👥 Лимит использований (1-1000):")
-    await state.set_state(DevStates.waiting_for_promo_limit)
-
-@dp.message(DevStates.waiting_for_promo_limit)
-async def dev_promo_limit_input(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    if not db.is_developer(user_id):
-        await message.answer("⛔ Доступ запрещен")
-        await state.clear()
-        return
-    
-    try:
-        limit = int(message.text.strip())
-        if limit < 1 or limit > 1000:
-            raise ValueError
-    except:
-        await message.answer("❌ Введите число от 1 до 1000:")
-        return
-    
-    data = await state.get_data()
-    code = data.get("promo_code")
-    days = data.get("promo_days")
-    
-    if db.create_promo(code, days, limit, user_id):
-        await message.answer(
-            f"✅ Промокод создан!\n\n📌 Код: <code>{code}</code>\n📅 {days} дней\n👥 Лимит: {limit}",
-            parse_mode="HTML",
-            reply_markup=kb.dev_promos_menu()
-        )
-    else:
-        await message.answer(
-            "❌ Ошибка! Код уже существует.",
-            reply_markup=kb.dev_promos_menu()
-        )
-    
-    await state.clear()
-
-@dp.callback_query(F.data == "dev_promo_list")
-async def dev_promo_list(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    if not db.is_developer(user_id):
-        await callback.answer("⛔ Доступ запрещен", show_alert=True)
-        return
-    
-    promos = db.get_all_promos()
-    
-    if not promos:
-        await callback.message.edit_text(
-            "📋 Промокодов нет",
-            reply_markup=kb.dev_promos_menu(),
-            parse_mode="HTML"
-        )
-        await callback.answer()
-        return
-    
-    text = "📋 Список промокодов\n\n"
-    
-    for promo in promos[:20]:
-        status = "✅" if promo["expires_at"] > int(time.time()) else "❌"
-        text += f"{status} <code>{promo['code']}</code>\n"
-        text += f"   📅 {promo['days']} дней | Исп: {promo['uses']}/{promo['max_uses']}\n"
-        text += f"   🕐 До: {datetime.fromtimestamp(promo['expires_at']).strftime('%d.%m.%Y')}\n\n"
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=kb.dev_promos_menu(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data == "dev_promo_delete")
-async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    
-    if not db.is_developer(user_id):
-        await callback.answer("⛔ Доступ запрещен", show_alert=True)
-        return
-    
-    await callback.message.edit_text(
-        "❌ Удалить промокод\n\nВведите код:",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
-        ])
-    )
-    await state.set_state(DevStates.waiting_for_promo_code)
-    await state.update_data(delete_mode=True)
-    await callback.answer()
-
-@dp.message(DevStates.waiting_for_promo_code)
-async def dev_promo_delete_input(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    
-    if not db.is_developer(user_id):
-        await message.answer("⛔ Доступ запрещен")
-        await state.clear()
-        return
-    
-    data = await state.get_data()
-    delete_mode = data.get("delete_mode", False)
-    
-    if delete_mode:
-        code = message.text.strip().upper()
-        
-        if db.delete_promo(code):
-            await message.answer(
-                f"✅ Промокод {code} удален!",
-                reply_markup=kb.dev_promos_menu(),
-                parse_mode="HTML"
-            )
-        else:
-            await message.answer(
-                f"❌ Промокод {code} не найден!",
-                reply_markup=kb.dev_promos_menu(),
-                parse_mode="HTML"
-            )
-        
-        await state.clear()
-        return
-
-# ═══════════════════════════════════════════════════════════════════
-# ВЫДАТЬ ПРЕМИУМ/ЗАПРОСЫ
-# ═══════════════════════════════════════════════════════════════════
 
 @dp.callback_query(F.data == "dev_give_premium")
 async def dev_give_premium(callback: CallbackQuery, state: FSMContext):
@@ -1393,255 +1435,6 @@ async def dev_requests_count_input(message: Message, state: FSMContext):
     await state.clear()
 
 # ═══════════════════════════════════════════════════════════════════
-# ПОИСК
-# ═══════════════════════════════════════════════════════════════════
-
-@dp.callback_query(F.data.startswith("search_"))
-async def start_search(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    
-    banned, reason = db.is_banned(user_id)
-    if banned:
-        await callback.answer(f"🚫 {reason}", show_alert=True)
-        return
-    
-    parts = callback.data.split("_")
-    length = int(parts[1])
-    with_digits = parts[2] == "true"
-    
-    if length == 5:
-        is_premium = db.is_premium(user_id)
-        if not is_premium:
-            await callback.answer(
-                "🔒 5-буквенные ники только с премиум! 💎",
-                show_alert=True
-            )
-            return
-    
-    can_search, remaining = db.check_cooldown(user_id)
-    if not can_search:
-        await callback.answer(f"⏳ Подождите {remaining} секунд!", show_alert=True)
-        return
-    
-    is_premium = db.is_premium(user_id)
-    free_requests = db.get_free_requests(user_id)
-    
-    if not is_premium and free_requests <= 0:
-        await callback.answer(
-            "❌ Закончились бесплатные запросы!\nКупите премиум 💎",
-            show_alert=True
-        )
-        return
-    
-    db.update_last_search(user_id)
-    
-    search_msg = await callback.message.edit_text(
-        "🔍 <b>Поиск свободного юзернейма...</b>\n\n"
-        f"📏 Длина: {length} символов\n"
-        f"🔢 С цифрами: {'Да' if with_digits else 'Нет'}\n"
-        f"⏳ 0/15\n\n"
-        f"<i>Начинаю поиск...</i>",
-        parse_mode="HTML"
-    )
-    
-    generator = NickGenerator(bot)
-    nick, attempts, checked = await generator.search_free(
-        length, with_digits, message=search_msg
-    )
-    
-    if nick:
-        if not is_premium:
-            db.use_free_request(user_id)
-        db.increment_searches(user_id)
-        db.add_found_username(user_id, nick)
-        
-        rating = generator.calculate_rating(nick)
-        price_usd = random.randint(7, 11)
-        
-        img_buffer = image_gen.generate_card(nick, rating, price_usd, attempts)
-        
-        text = f"""
-✅ <b>Найден свободный ник!</b>
-
-👤 <b>Юзернейм:</b> @{nick}
-📏 <b>Длина:</b> {length} символов
-{'🔢 С цифрами' if with_digits else '🔤 Только буквы'}
-⭐ <b>Рейтинг:</b> {rating}/10
-💰 <b>Ценность:</b> ${price_usd}
-🎯 <b>Найден за:</b> {attempts} попыток
-"""
-        
-        await callback.message.answer_photo(
-            photo=BufferedInputFile(img_buffer.getvalue(), filename="nick.png"),
-            caption=text,
-            reply_markup=kb.result_menu(nick),
-            parse_mode="HTML"
-        )
-    else:
-        await search_msg.edit_text(
-            "❌ <b>Свободный ник не найден</b>\n\n"
-            f"⏳ Попыток: 15/15\n"
-            f"📋 Проверено: {len(checked)} ников\n\n"
-            "💡 <b>Запрос не был потрачен!</b>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="menu_search")],
-                [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_back")]
-            ])
-        )
-    
-    await callback.answer()
-
-@dp.callback_query(F.data == "noop")
-async def noop_callback(callback: CallbackQuery):
-    await callback.answer("🔒 Доступно только с премиум!", show_alert=True)
-
-@dp.callback_query(F.data == "search_skip")
-async def search_skip(callback: CallbackQuery):
-    """Пропустить ник и начать новый поиск"""
-    await menu_search(callback)
-
-@dp.callback_query(F.data.startswith("copy_"))
-async def copy_username(callback: CallbackQuery):
-    nick = callback.data.split("_")[1]
-    
-    await callback.answer(f"✅ @{nick} скопирован!", show_alert=True)
-    
-    await callback.message.answer(
-        f"📋 <code>@{nick}</code>\n\n✅ Ник скопирован! Используйте его в Telegram.",
-        parse_mode="HTML"
-    )
-
-# ═══════════════════════════════════════════════════════════════════
-# ПРЕМИУМ
-# ═══════════════════════════════════════════════════════════════════
-
-@dp.callback_query(F.data == "menu_premium")
-async def menu_premium(callback: CallbackQuery):
-    user_id = callback.from_user.id
-    is_premium = db.is_premium(user_id)
-    
-    text = """
-💎 <b>ПРЕМИУМ ПОДПИСКА</b>
-
-<b>ФУНКЦИИ:</b>
-• Безлимитный поиск
-• Доступ к 5-буквенным никам
-
-<b>ЦЕНЫ:</b>
-1 день — 65⭐
-3 дня — 150⭐
-10 дней — 400⭐
-30 дней — 800⭐
-"""
-    
-    if is_premium:
-        remaining = db.get_premium_remaining(user_id)
-        days = remaining // 86400
-        hours = (remaining % 86400) // 3600
-        text += f"\n✅ Активен: {days}д {hours}ч"
-    else:
-        text += "\n❌ Не активен"
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=kb.premium_menu(),
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("premium_"))
-async def buy_premium(callback: CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    
-    if callback.data == "premium_promo":
-        await callback.message.edit_text(
-            "🎁 Введите промокод:",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_premium")]
-            ])
-        )
-        await state.set_state(PromoStates.waiting_for_promo)
-        await callback.answer()
-        return
-    
-    days = int(callback.data.split("_")[1])
-    price = PRICES.get(days, 65)
-    
-    title = f"Премиум GHOST — {days} дней"
-    description = f"Безлимитный поиск на {days} дней!"
-    payload = f"premium_{days}_{user_id}_{int(time.time())}"
-    prices = [LabeledPrice(label=f"{days} дней", amount=price)]
-    
-    try:
-        await bot.send_invoice(
-            chat_id=user_id,
-            title=title,
-            description=description,
-            payload=payload,
-            provider_token="",
-            currency="XTR",
-            prices=prices,
-            start_parameter="premium"
-        )
-        await callback.answer()
-    except Exception as e:
-        logger.error(f"Ошибка: {e}")
-        await callback.answer("❌ Ошибка платежа", show_alert=True)
-
-@dp.pre_checkout_query()
-async def pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
-
-@dp.message(F.content_type == ContentType.SUCCESSFUL_PAYMENT)
-async def process_successful_payment(message: Message):
-    user_id = message.from_user.id
-    payment_info = message.successful_payment
-    
-    payload = payment_info.invoice_payload
-    parts = payload.split("_")
-    
-    if len(parts) >= 2 and parts[0] == "premium":
-        days = int(parts[1])
-        new_until = db.add_premium(user_id, days)
-        
-        await message.answer(
-            f"✅ <b>Премиум активирован!</b>\n\n"
-            f"📦 {days} дней\n"
-            f"💰 {payment_info.total_amount} ⭐\n"
-            f"💎 Безлимитные поиски!\n"
-            f"🕐 До: {datetime.fromtimestamp(new_until).strftime('%d.%m.%Y %H:%M')}",
-            parse_mode="HTML",
-            reply_markup=kb.main_menu(db.is_developer(user_id))
-        )
-
-@dp.message(PromoStates.waiting_for_promo)
-async def handle_promo(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    code = message.text.strip().upper()
-    
-    success, msg, days = db.use_promo(user_id, code)
-    
-    if success:
-        await message.answer(
-            f"✅ {msg}\n\n🎉 Премиум на {days} дней!",
-            parse_mode="HTML",
-            reply_markup=kb.main_menu(db.is_developer(user_id))
-        )
-    else:
-        await message.answer(
-            f"❌ {msg}",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔄 Попробовать снова", callback_data="premium_promo")],
-                [InlineKeyboardButton(text="◀️ Назад", callback_data="menu_premium")]
-            ])
-        )
-    
-    await state.clear()
-
-# ═══════════════════════════════════════════════════════════════════
 # ПРОФИЛЬ
 # ═══════════════════════════════════════════════════════════════════
 
@@ -1814,6 +1607,201 @@ async def help_contact(callback: CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
+
+# ═══════════════════════════════════════════════════════════════════
+# ПРОМОКОДЫ (РАЗРАБОТЧИК)
+# ═══════════════════════════════════════════════════════════════════
+
+@dp.callback_query(F.data == "dev_promos")
+async def dev_promos_menu(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    
+    if not db.is_developer(user_id):
+        await callback.answer("⛔ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "🎁 Управление промокодами",
+        reply_markup=kb.dev_promos_menu(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "dev_promo_create")
+async def dev_promo_create(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    
+    if not db.is_developer(user_id):
+        await callback.answer("⛔ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "🎁 Создать промокод\n\nВведите код (буквы и цифры):",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
+        ])
+    )
+    await state.set_state(DevStates.waiting_for_promo_code)
+    await callback.answer()
+
+@dp.message(DevStates.waiting_for_promo_code)
+async def dev_promo_code_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if not db.is_developer(user_id):
+        await message.answer("⛔ Доступ запрещен")
+        await state.clear()
+        return
+    
+    code = message.text.strip().upper()
+    if not re.match(r'^[A-Z0-9]+$', code):
+        await message.answer("❌ Только буквы и цифры:")
+        return
+    
+    await state.update_data(promo_code=code)
+    await message.answer("📅 Количество дней (1-365):")
+    await state.set_state(DevStates.waiting_for_promo_days)
+
+@dp.message(DevStates.waiting_for_promo_days)
+async def dev_promo_days_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if not db.is_developer(user_id):
+        await message.answer("⛔ Доступ запрещен")
+        await state.clear()
+        return
+    
+    try:
+        days = int(message.text.strip())
+        if days < 1 or days > 365:
+            raise ValueError
+    except:
+        await message.answer("❌ Введите число от 1 до 365:")
+        return
+    
+    await state.update_data(promo_days=days)
+    await message.answer("👥 Лимит использований (1-1000):")
+    await state.set_state(DevStates.waiting_for_promo_limit)
+
+@dp.message(DevStates.waiting_for_promo_limit)
+async def dev_promo_limit_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if not db.is_developer(user_id):
+        await message.answer("⛔ Доступ запрещен")
+        await state.clear()
+        return
+    
+    try:
+        limit = int(message.text.strip())
+        if limit < 1 or limit > 1000:
+            raise ValueError
+    except:
+        await message.answer("❌ Введите число от 1 до 1000:")
+        return
+    
+    data = await state.get_data()
+    code = data.get("promo_code")
+    days = data.get("promo_days")
+    
+    if db.create_promo(code, days, limit, user_id):
+        await message.answer(
+            f"✅ Промокод создан!\n\n📌 Код: <code>{code}</code>\n📅 {days} дней\n👥 Лимит: {limit}",
+            parse_mode="HTML",
+            reply_markup=kb.dev_promos_menu()
+        )
+    else:
+        await message.answer(
+            "❌ Ошибка! Код уже существует.",
+            reply_markup=kb.dev_promos_menu()
+        )
+    
+    await state.clear()
+
+@dp.callback_query(F.data == "dev_promo_list")
+async def dev_promo_list(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    
+    if not db.is_developer(user_id):
+        await callback.answer("⛔ Доступ запрещен", show_alert=True)
+        return
+    
+    promos = db.get_all_promos()
+    
+    if not promos:
+        await callback.message.edit_text(
+            "📋 Промокодов нет",
+            reply_markup=kb.dev_promos_menu(),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        return
+    
+    text = "📋 Список промокодов\n\n"
+    
+    for promo in promos[:20]:
+        status = "✅" if promo["expires_at"] > int(time.time()) else "❌"
+        text += f"{status} <code>{promo['code']}</code>\n"
+        text += f"   📅 {promo['days']} дней | Исп: {promo['uses']}/{promo['max_uses']}\n"
+        text += f"   🕐 До: {datetime.fromtimestamp(promo['expires_at']).strftime('%d.%m.%Y')}\n\n"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=kb.dev_promos_menu(),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "dev_promo_delete")
+async def dev_promo_delete(callback: CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    
+    if not db.is_developer(user_id):
+        await callback.answer("⛔ Доступ запрещен", show_alert=True)
+        return
+    
+    await callback.message.edit_text(
+        "❌ Удалить промокод\n\nВведите код:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="◀️ Отмена", callback_data="dev_promos")]
+        ])
+    )
+    await state.set_state(DevStates.waiting_for_promo_code)
+    await state.update_data(delete_mode=True)
+    await callback.answer()
+
+@dp.message(DevStates.waiting_for_promo_code)
+async def dev_promo_delete_input(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    
+    if not db.is_developer(user_id):
+        await message.answer("⛔ Доступ запрещен")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    delete_mode = data.get("delete_mode", False)
+    
+    if delete_mode:
+        code = message.text.strip().upper()
+        
+        if db.delete_promo(code):
+            await message.answer(
+                f"✅ Промокод {code} удален!",
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer(
+                f"❌ Промокод {code} не найден!",
+                reply_markup=kb.dev_promos_menu(),
+                parse_mode="HTML"
+            )
+        
+        await state.clear()
+        return
 
 # ═══════════════════════════════════════════════════════════════════
 # ВЕБ-СЕРВЕР

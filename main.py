@@ -430,15 +430,39 @@ class NickGenerator:
             nick = nick[:-1] + random.choice('0123456789')
         return nick.lower()
     
+    async def check_fragment(self, nick: str) -> bool:
+        """ПРОВЕРКА НА АУКЦИОНЕ FRAGMENT"""
+        try:
+            url = f"https://fragment.com/username/{nick}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=3) as response:
+                    if response.status == 200:
+                        html = await response.text()
+                        if "Auction" in html or "Bid" in html or "auction" in html:
+                            return True
+                    return False
+        except:
+            return False
+    
     async def check_available(self, nick: str) -> bool:
+        """ПОЛНАЯ ПРОВЕРКА: API + FRAGMENT"""
         try:
             await self.bot.get_chat(f"@{nick}")
+            logger.info(f"❌ @{nick} - ЗАНЯТ (Telegram)")
             return False
         except TelegramBadRequest as e:
-            if "chat not found" in str(e).lower() or "user not found" in str(e).lower():
+            error = str(e).lower()
+            if "chat not found" in error or "user not found" in error:
+                on_fragment = await self.check_fragment(nick)
+                if on_fragment:
+                    logger.info(f"❌ @{nick} - НА АУКЦИОНЕ FRAGMENT!")
+                    return False
+                logger.info(f"✅ @{nick} - СВОБОДЕН!")
                 return True
+            logger.info(f"❌ @{nick} - ОШИБКА API: {e}")
             return False
-        except Exception:
+        except Exception as e:
+            logger.info(f"❌ @{nick} - НЕИЗВЕСТНАЯ ОШИБКА: {e}")
             return False
     
     async def search_free(self, length: int, with_digits: bool = False, 
